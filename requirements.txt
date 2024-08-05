@@ -1,0 +1,6 @@
+langchain==0.2.5
+langchain-anthropic==0.1.15
+langchain-community==0.2.5
+langchain-core==0.2.9
+langchain-openai==0.1.8
+langchain-pinecone==0.1.1
