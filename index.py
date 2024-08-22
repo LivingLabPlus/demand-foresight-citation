@@ -1,8 +1,7 @@
 import streamlit as st
 from langchain_conversational_rag import rag
 
-st.set_page_config(page_title="Demand Foresight")
-st.title('Demand Foresight')
+st.set_page_config(page_title="小型企業創新研發計畫")
 
 #claude_api_key = st.sidebar.text_input('Claude API Key')
 select_model = st.sidebar.selectbox(

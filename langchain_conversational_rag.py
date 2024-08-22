@@ -158,7 +158,8 @@ def rag(
     rag_chain = get_rag_chain(
         model_id,
         tag,
-        temperature=temperature
+        temperature=temperature,
+        index_name=st.secrets['INDEX_NAME']
     )
     conversational_rag_chain = RunnableWithMessageHistory(
         rag_chain,
