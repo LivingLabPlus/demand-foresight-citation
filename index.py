@@ -1,73 +1,45 @@
 import streamlit as st
-from langchain_conversational_rag import rag
+import streamlit_authenticator as stauth
 
-st.set_page_config(page_title="小型企業創新研發計畫")
+import yaml
+from yaml.loader import SafeLoader
 
-#claude_api_key = st.sidebar.text_input('Claude API Key')
-select_model = st.sidebar.selectbox(
-    label="模型", 
-    options=st.secrets['MODEL_OPTION'],
-    index=0, 
-    key="model_selection"
+st.set_page_config(page_title="Demand Foresight")
+
+with open('users.yaml') as file:
+    config = yaml.load(file, Loader=SafeLoader)
+
+# if 'authenticator' not in st.session_state:
+authenticator = stauth.Authenticate(
+    config['credentials'],
+    config['cookie']['name'],
+    config['cookie']['key'],
+    config['cookie']['expiry_days']
 )
-select_tag = st.sidebar.selectbox(
-    label="文件類別",  
-    options=st.secrets['TAG_OPTION'],
-    index=0, 
-    key="tag_selection"
-)
-temp = st.sidebar.slider("Temperature", min_value=0.00 , max_value=1.0, step=0.01, key="temperature")
-st.sidebar.link_button("測試回饋表單", st.secrets["SHEET_LINK"])
 
-# Initialize chat history
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+# Call the login method
+name, authentication_status, username = authenticator.login()
 
-# Display chat messages from history on app rerun
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+def empty_page():
+    pass
 
-# Accept user input
-if prompt := st.chat_input("輸入你的問題"):
-    # Add user message to chat history
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    # Display user message in chat message container
-    with st.chat_message("user"):
-        st.markdown(prompt)
+# st.write(st.session_state['authentication_status'])
+if authentication_status:
+    database_page = st.Page("database.py", title="資料庫", icon=":material/settings:")
+    chat_page = st.Page("chat.py", title="聊天", icon=":material/settings:", default=True)
+    account_page = st.Page("account.py", title="帳戶", icon=":material/settings:")
 
-    session_id = None
-    if "session_id" in st.session_state:
-        session_id = st.session_state.session_id
+    # Store username and logout function in session state
+    st.session_state['username'] = username
+    st.session_state['authenticator'] = authenticator
 
-    if session_id is not None:
-        _, stream = rag(
-            prompt,
-            model_id=select_model,
-            tag=select_tag,
-            session_id=session_id, 
-            temperature=temp
-        )
-    else:
-        session_id, stream = rag(
-            prompt,
-            model_id=select_model,
-            tag=select_tag, 
-            temperature=temp
-        )
-        st.session_state.session_id = session_id
-
-    # Display assistant response in chat message container
-    with st.chat_message("assistant"):
-        def generate_response():
-            for chunk in stream:
-                if context := chunk.get('context'):
-                    for c in context:
-                        print(c.metadata)
-
-                if answer_chunk := chunk.get("answer"):
-                    yield(answer_chunk)
-
-        response = st.write_stream(generate_response)
-        
-    st.session_state.messages.append({"role": "assistant", "content": response})
+    pg = st.navigation({"選單": [chat_page, database_page, account_page]})
+    pg.run()
+elif authentication_status is False:
+    pg = st.navigation([st.Page(empty_page)])
+    pg.run()
+    st.error('使用者名稱/密碼不正確')
+elif authentication_status is None:
+    pg = st.navigation([st.Page(empty_page)])
+    pg.run()
+    
