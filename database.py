@@ -11,12 +11,12 @@ from openai import OpenAI
 from tqdm import tqdm
 from time import sleep
 
-openai_client = OpenAI(api_key=st.secrets['OPENAI_API_KEY'])
-pc = Pinecone(api_key=st.secrets['PINECONE_API_KEY'])
+openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
 
 @st.cache_data
 def display_documents(df):
-    return df[['title', 'tag']]
+    return df[["title", "tag"]]
 
 
 if "conn" not in st.session_state:
@@ -24,17 +24,17 @@ if "conn" not in st.session_state:
     conn = st.connection("gsheets", type=GSheetsConnection)
     st.session_state.conn = conn
 
-if 'documents' not in st.session_state:
-    st.session_state.documents = st.session_state.conn.read(worksheet='documents')
-    st.session_state.vectors = st.session_state.conn.read(worksheet='vectors')
+if "documents" not in st.session_state:
+    st.session_state.documents = st.session_state.conn.read(worksheet="documents")
+    st.session_state.vectors = st.session_state.conn.read(worksheet="vectors")
     st.session_state.displayed_documents = display_documents(st.session_state.documents)
 
-if 'upload_success' in st.session_state and st.session_state.upload_success:
-    st.toast('資料上傳成功！', icon="✅")
+if "upload_success" in st.session_state and st.session_state.upload_success:
+    st.toast("資料上傳成功！", icon="✅")
     st.session_state.upload_success = 0
 
-if 'delete_success' in st.session_state and st.session_state.delete_success:
-    st.toast('資料刪除成功！', icon="✅")
+if "delete_success" in st.session_state and st.session_state.delete_success:
+    st.toast("資料刪除成功！", icon="✅")
     st.session_state.delete_success = 0
 
 
@@ -67,34 +67,34 @@ event = st.dataframe(
 
 def delete_pinecone_documents(index):
     selected_indices = event.selection.rows
-    selected_document_ids = st.session_state.documents.loc[selected_indices, 'document_id'].tolist()
+    selected_document_ids = st.session_state.documents.loc[selected_indices, "document_id"].tolist()
     filtered_df = st.session_state.vectors[
-        st.session_state.vectors['document_id'].isin(selected_document_ids)
+        st.session_state.vectors["document_id"].isin(selected_document_ids)
     ]
-    vector_ids = filtered_df['vector_id'].tolist()
+    vector_ids = filtered_df["vector_id"].tolist()
     
     for i in range(0, len(vector_ids), 1000):
         batch_ids = vector_ids[i : i + 1000]
         index.delete(ids=batch_ids)
 
     new_vectors_df = st.session_state.vectors[
-        ~st.session_state.vectors['document_id'].isin(selected_document_ids)
+        ~st.session_state.vectors["document_id"].isin(selected_document_ids)
     ]
-    st.session_state.conn.update(worksheet='vectors', data=new_vectors_df)
+    st.session_state.conn.update(worksheet="vectors", data=new_vectors_df)
     st.session_state.vectors = new_vectors_df
 
 
 @st.dialog("刪除文件")
 def delete_documents():
     selected_indices = event.selection.rows
-    titles = st.session_state.documents.loc[selected_indices, 'title'].tolist()
-    title_str = '\n'.join([f'- {title}' for title in titles])
-    info_str = '確認刪除以下文件？\n' + title_str
+    titles = st.session_state.documents.loc[selected_indices, "title"].tolist()
+    title_str = "\n".join([f"- {title}" for title in titles])
+    info_str = "確認刪除以下文件？\n" + title_str
     st.markdown(info_str)
 
-    if st.button('確認'):
-        index = get_index(st.secrets['INDEX_NAME'])
-        with st.spinner(text='刪除中...'):    
+    if st.button("確認"):
+        index = get_index(st.secrets["INDEX_NAME"])
+        with st.spinner(text="刪除中..."):    
             delete_pinecone_documents(index)
             selected_indices = event.selection.rows
             filtered_documents = st.session_state.documents.drop(selected_indices)
@@ -109,7 +109,7 @@ def delete_documents():
 
 def generate_unique_id(content: str) -> str:
     # Ensure the content is encoded to bytes
-    content_bytes = content.encode('utf-8')
+    content_bytes = content.encode("utf-8")
     # Create a SHA-256 hash object
     sha256_hash = hashlib.sha256()
     # Update the hash object with the bytes of the content
@@ -135,11 +135,11 @@ def get_index(index_name):
         pc.create_index(
             index_name,
             dimension=1536,  # dimensionality of text-embedding-3-small embeddings
-            metric='dotproduct',
+            metric="dotproduct",
             spec=spec
         )
         # wait for index to be initialized
-        while not pc.describe_index(index_name).status['ready']:
+        while not pc.describe_index(index_name).status["ready"]:
             sleep(1)
 
     # connect to index
@@ -159,10 +159,10 @@ def load_pdf(bytes_data, tag, name):
             continue
 
         data.append({
-            'tag': tag,
-            'name': name,
-            'page': i + 1,
-            'content': content,
+            "tag": tag,
+            "name": name,
+            "page": i + 1,
+            "content": content,
         })
 
     return data
@@ -178,15 +178,15 @@ def upsert_documents(index, documents, batch_size=64):
     id_list = []
     for i in tqdm(range(0, len(documents), batch_size)):
         docs = documents[i : i + batch_size]
-        contents = [doc['content'] for doc in docs]
+        contents = [doc["content"] for doc in docs]
         embeddings = get_embeddings(contents)
         
         if embeddings is None:
-            doc_name = docs[0]['name']
-            print(f'cannot encode {doc_name} page {i}-{i + batch_size}')
+            doc_name = docs[0]["name"]
+            print(f"cannot encode {doc_name} page {i}-{i + batch_size}")
             continue
 
-        ids_batch = [generate_unique_id(doc['content']) for doc in docs]
+        ids_batch = [generate_unique_id(doc["content"]) for doc in docs]
         to_upsert = list(zip(ids_batch, embeddings, docs))
         index.upsert(vectors=to_upsert)
         id_list += ids_batch
@@ -207,11 +207,11 @@ def upload_document_to_google_sheet(id_list, title, tag):
     st.session_state.documents = new_df
 
     # update sheet "documents" 
-    st.session_state.conn.update(worksheet='documents', data=new_df)
+    st.session_state.conn.update(worksheet="documents", data=new_df)
 
     new_vectors = [{
-        'document_id': document_id,
-        'vector_id': vector_id
+        "document_id": document_id,
+        "vector_id": vector_id
     } for vector_id in id_list]
     new_df = pd.DataFrame(new_vectors)
     new_df = pd.concat([st.session_state.vectors, new_df])
@@ -219,23 +219,34 @@ def upload_document_to_google_sheet(id_list, title, tag):
     st.session_state.vectors = new_df
 
     # update sheet "vectors"
-    st.session_state.conn.update(worksheet='vectors', data=new_df)
+    st.session_state.conn.update(worksheet="vectors", data=new_df)
 
 
 @st.dialog("上傳文件")
 def upload_document():
-    uploaded_files = st.file_uploader("選取檔案", accept_multiple_files=True)
-    tag = st.selectbox(
-        "選取文件類別",
-        ("AI", "能源"),
-    )
+    options = st.secrets["TAG_OPTION"][:]
+    if "全" in options:
+        options.remove("全")
 
-    if st.button("提交"):
-        progress_text = '上傳文件...'
+    uploaded_files = st.file_uploader("選取檔案", accept_multiple_files=True, type="pdf")
+    tag = st.selectbox("選取文件類別", options)
+
+    titles = [Path(file.name).stem for file in uploaded_files]
+    matching_titles = st.session_state.displayed_documents[
+        st.session_state.displayed_documents["title"].isin(titles)
+    ]["title"].tolist()
+    
+    if len(matching_titles) != 0:
+        st.error(f"「{matching_titles[0]}」已經在資料庫中！")
+    
+    disabled = (len(matching_titles) != 0) or (len(uploaded_files) == 0)
+
+    if st.button("提交", disabled=disabled):
+        progress_text = "上傳文件..."
         my_bar = st.progress(0, text=progress_text)
         current_stage = 0
         total_stage = len(uploaded_files) * 3
-        index = get_index(st.secrets['INDEX_NAME'])
+        index = get_index(st.secrets["INDEX_NAME"])
 
         for i, uploaded_file in enumerate(uploaded_files):
             title = Path(uploaded_file.name).stem
@@ -263,8 +274,7 @@ def upload_document():
 
 columns = st.columns([1] * 9)
 with columns[0]:
-    if st.button(label='上傳'):
-        upload_document()
+    st.button(label="上傳", on_click=upload_document)
 
 with columns[1]:
     disabled = not bool(event.selection.rows)
