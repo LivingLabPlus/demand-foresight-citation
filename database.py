@@ -23,8 +23,10 @@ if "conn" not in st.session_state:
     # Create a connection object.
     conn = st.connection("gsheets", type=GSheetsConnection)
     st.session_state.conn = conn
-    st.session_state.documents = conn.read(worksheet='documents')
-    st.session_state.vectors = conn.read(worksheet='vectors')
+
+if 'documents' not in st.session_state:
+    st.session_state.documents = st.session_state.conn.read(worksheet='documents')
+    st.session_state.vectors = st.session_state.conn.read(worksheet='vectors')
     st.session_state.displayed_documents = display_documents(st.session_state.documents)
 
 if 'upload_success' in st.session_state and st.session_state.upload_success:

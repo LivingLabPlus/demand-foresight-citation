@@ -1,22 +1,91 @@
 import json
 import uuid
+import pandas as pd
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 from langchain_conversational_rag import rag
+from openai import OpenAI
+from datetime import datetime
 
+client = OpenAI(api_key=st.secrets['OPENAI_API_KEY'])
+st.cache_data.clear()
+
+def get_title(message):
+    prompt = f"請為接下來的訊息產生一個10字以內的標題: {message}"
+
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": prompt}
+        ]
+    )
+    return response.choices[0].message.content
+
+
+def transform_message_df(df):
+    df = df[df['username'] == st.session_state['username']]
+    df.drop('username', axis=1, inplace=True)
+
+    # Ensure timestamp column is in datetime format
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+    # Group by chat_id and title, then sort by timestamp
+    grouped = df.groupby(['chat_id', 'title'])
+
+    # Prepare the final output
+    result = []
+
+    for (chat_id, title), group in grouped:
+        messages = group[['role', 'content', 'timestamp']].sort_values('timestamp').to_dict(orient='records')
+        chat_entry = {
+            'chat_id': chat_id,
+            'title': title,
+            'messages': messages
+        }
+        result.append(chat_entry)
+
+    # result format:
+    # [
+    #     {
+    #         "chat_id": "string",
+    #         "title": "string",
+    #         "messages": [
+    #             {
+    #                 "role": "string",
+    #                 "content": "string",
+    #                 "timestamp": "datetime"
+    #             }
+    #         ]
+    #     }
+    # ]
+
+    sorted_result = sorted(result, key=lambda x: x['messages'][-1]['timestamp'], reverse=True)
+    return sorted_result
+
+
+if "conn" not in st.session_state:
+    # Create a connection object.
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    st.session_state.conn = conn
 
 # Initialize chat history
 if "messages" not in st.session_state:
-    with open('data/conversations.json') as f:
-        st.session_state.messages = json.load(f)
+    st.session_state.message_df = st.session_state.conn.read(worksheet='messages')
+    st.session_state.messages = transform_message_df(st.session_state.message_df)
 
+if 'options' not in st.session_state or 'captions' not in st.session_state:
     options, captions = [], []
     for m in st.session_state.messages:
-        options.append(m['chat_id'])
-        captions.append(m['title'])
+        options.append(m['title'])
+        # retrieve the timestamp of the first message in the conversion
+        captions.append(m['messages'][-1]['timestamp'].strftime("%Y-%m-%d"))
 
     st.session_state.options = options
     st.session_state.captions = captions
 
+if 'selected_dialog' not in st.session_state:
+    st.session_state.selected_dialog = None
 
 with st.sidebar:
     history_tab, option_tab = st.tabs(["對話紀錄", "模型選項"])
@@ -30,7 +99,7 @@ with st.sidebar:
         )
         select_tag = st.selectbox(
             label="文件類別", 
-            options=["全", "AI", "能源", "樂齡", "智慧城市"], 
+            options=st.secrets['TAG_OPTION'], 
             index=0, 
             key="tag_selection"
         )
@@ -46,50 +115,73 @@ with st.sidebar:
             use_container_width=True
         )
 
-        selected_dialog = st.radio(
-            "對話紀錄",
-            st.session_state.options,
-            label_visibility="collapsed",
-            captions=st.session_state.captions,
-            index=None,
-            key='selected_dialog'
-        )
+        if len(st.session_state.options) != 0:
+            selected_dialog = st.radio(
+                "對話紀錄",
+                st.session_state.options,
+                captions=st.session_state.captions,
+                label_visibility="collapsed",
+                index=None,
+                key='selected_dialog'
+            )
 
 # display selected dialogue
 if st.session_state.selected_dialog is not None:
-    chat_id = st.session_state.selected_dialog
-    print('chat id:', chat_id)
+    title = st.session_state.selected_dialog
     
     for dialog in st.session_state.messages:
-        if dialog['chat_id'] != chat_id:
+        if dialog['title'] != title:
             continue
-    
-        print('messages:', dialog['messages'])
 
         for message in dialog['messages']:                
             with st.chat_message(message['role']):
                 st.markdown(message['content'])
 
 
+def add_message_to_database(title, chat_id, content, role):
+    message_id = uuid.uuid4()
+    new_row = [{
+        'username': st.session_state['username'],
+        'chat_id': chat_id,
+        'message_id': message_id,
+        'content': content,
+        'title': title,
+        'timestamp': datetime.now(),
+        'role': role
+    }]
+
+    new_df = pd.DataFrame(new_row)
+    new_df = pd.concat([st.session_state.message_df, new_df])
+    new_df = new_df.reset_index(drop=True)
+    st.session_state.message_df = new_df
+    st.session_state.conn.update(worksheet='messages', data=new_df)
+
+
 def update_chat_history(response, role):
-    chat_id = st.session_state.selected_dialog
+    title = st.session_state.selected_dialog
     for dialog in st.session_state.messages:
-        if dialog['chat_id'] != chat_id:
+        if dialog['title'] != title:
             continue
+        
         dialog['messages'].append({
             'role': role,
             'content': response
         })
+        return dialog['chat_id']
+    
+    return None
 
 
 def add_chat_history():
     # a new dialogue
     if st.session_state.selected_dialog is None:
         # Add user message to chat history
-        chat_id = str(uuid.uuid4())[:6]
+        title = get_title(st.session_state.user_query)
+        timestamp = datetime.now().strftime("%Y-%m-%d")
+        chat_id = uuid.uuid4()
         dialog = {
             'chat_id': chat_id,
-            'title': prompt,
+            'title': title,
             'messages': [
                 {
                     'role': 'user',
@@ -98,11 +190,14 @@ def add_chat_history():
             ]
         }
         st.session_state.messages.append(dialog)
-        st.session_state.options.insert(0, chat_id)
-        st.session_state.captions.insert(0, st.session_state.user_query)
-        st.session_state.selected_dialog = chat_id
+        st.session_state.options.insert(0, title)
+        st.session_state.captions.insert(0, timestamp)
+        st.session_state.selected_dialog = title
     else:
-        update_chat_history(st.session_state.user_query, 'user')
+        chat_id = update_chat_history(st.session_state.user_query, 'user')
+        title = st.session_state.selected_dialog
+    
+    add_message_to_database(title, chat_id, st.session_state.user_query, 'user')
 
 
 # Accept user input
@@ -128,4 +223,6 @@ if prompt := st.chat_input("輸入你的問題", key="user_query", on_submit=add
 
         response = st.write_stream(generate_response)
         
-    update_chat_history(response, 'assistant')
+    chat_id = update_chat_history(response, 'assistant')
+    title = st.session_state.selected_dialog
+    add_message_to_database(title, chat_id, response, 'assistant')
