@@ -18,16 +18,30 @@ pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
 def display_documents(df):
     return df[["title", "tag"]]
 
+@st.cache_data
+def filter_df_by_username(df):
+    return df[df["username"] == st.session_state.username]
+
+@st.cache_data
+def filter_df_by_document_ids(df, document_ids):
+    return df[df["document_id"].isin(document_ids)]
+
 
 if "conn" not in st.session_state:
     # Create a connection object.
     conn = st.connection("gsheets", type=GSheetsConnection)
     st.session_state.conn = conn
 
+if "user_documents" not in st.session_state:
+    st.session_state.user_documents = st.session_state.conn.read(worksheet="userDocuments")
+
+user_user_documents = filter_df_by_username(st.session_state.user_documents)
+document_ids = user_user_documents["document_id"].tolist()
 if "documents" not in st.session_state:
     st.session_state.documents = st.session_state.conn.read(worksheet="documents")
+
+if "vectors" not in st.session_state:
     st.session_state.vectors = st.session_state.conn.read(worksheet="vectors")
-    st.session_state.displayed_documents = display_documents(st.session_state.documents)
 
 if "upload_success" in st.session_state and st.session_state.upload_success:
     st.toast("資料上傳成功！", icon="✅")
@@ -55,8 +69,10 @@ column_configuration = {
 }
 
 st.header("資料庫")
+user_documents = filter_df_by_document_ids(st.session_state.documents, document_ids)
+displayed_documents = display_documents(user_documents)
 event = st.dataframe(
-    st.session_state.displayed_documents,
+    displayed_documents,
     column_config=column_configuration,
     use_container_width=True,
     hide_index=True,
@@ -96,13 +112,18 @@ def delete_documents():
         index = get_index(st.secrets["INDEX_NAME"])
         with st.spinner(text="刪除中..."):    
             delete_pinecone_documents(index)
-            selected_indices = event.selection.rows
             filtered_documents = st.session_state.documents.drop(selected_indices)
             filtered_documents = filtered_documents.reset_index(drop=True)
-            st.session_state.conn.update(data=filtered_documents)
-        
+            st.session_state.conn.update(worksheet="documents", data=filtered_documents)
+
+            document_ids = st.session_state.documents.loc[selected_indices, "document_id"].tolist()
+            username = st.session_state.username
+            user_doc = st.session_state.user_documents
+            filtered_user_documents = user_doc[~((user_doc["username"] == username) & (user_doc["document_id"].isin(document_ids)))]
+            st.session_state.conn.update(worksheet="userDocuments", data=filtered_user_documents)
+
         st.session_state.documents = filtered_documents
-        st.session_state.displayed_documents = display_documents(st.session_state.documents)
+        st.session_state.user_documents = filtered_user_documents
         st.session_state.delete_success = 1
         st.rerun()
 
@@ -221,6 +242,20 @@ def upload_document_to_google_sheet(id_list, title, tag):
     # update sheet "vectors"
     st.session_state.conn.update(worksheet="vectors", data=new_df)
 
+    new_row = [{
+        "id": str(uuid.uuid4()),
+        "username": st.session_state["username"],
+        "document_id": document_id,	
+        "access_level": "write",
+    }]
+    new_df = pd.DataFrame(new_row)
+    new_df = pd.concat([st.session_state.user_documents, new_df])
+    new_df = new_df.reset_index(drop=True)
+    st.session_state.user_documents = new_df
+
+    # update sheet "userDocuments" 
+    st.session_state.conn.update(worksheet="userDocuments", data=new_df)
+
 
 @st.dialog("上傳文件")
 def upload_document():
@@ -232,8 +267,8 @@ def upload_document():
     tag = st.selectbox("選取文件類別", options)
 
     titles = [Path(file.name).stem for file in uploaded_files]
-    matching_titles = st.session_state.displayed_documents[
-        st.session_state.displayed_documents["title"].isin(titles)
+    matching_titles = displayed_documents[
+        displayed_documents["title"].isin(titles)
     ]["title"].tolist()
     
     if len(matching_titles) != 0:
@@ -241,7 +276,7 @@ def upload_document():
     
     disabled = (len(matching_titles) != 0) or (len(uploaded_files) == 0)
 
-    if st.button("提交", disabled=disabled):
+    if st.button("提交", disabled=disabled, key="submit_button"):
         progress_text = "上傳文件..."
         my_bar = st.progress(0, text=progress_text)
         current_stage = 0
@@ -267,14 +302,14 @@ def upload_document():
             my_bar.progress(current_stage / total_stage, text=progress_text)
 
         my_bar.empty()
-        st.session_state.displayed_documents = display_documents(st.session_state.documents)
+        # st.session_state.displayed_documents = display_documents(st.session_state.documents)
         st.session_state.upload_success = 1
         st.rerun()
 
 
 columns = st.columns([1] * 9)
 with columns[0]:
-    st.button(label="上傳", on_click=upload_document)
+    st.button(label="上傳", on_click=upload_document, key="upload_button")
 
 with columns[1]:
     disabled = not bool(event.selection.rows)
@@ -282,5 +317,6 @@ with columns[1]:
         "刪除", 
         type="primary", 
         on_click=delete_documents,
-        disabled=disabled
+        disabled=disabled,
+        key="delete_button"
     )

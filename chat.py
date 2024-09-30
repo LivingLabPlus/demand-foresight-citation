@@ -23,8 +23,9 @@ def get_title(message):
     return response.choices[0].message.content
 
 
-def transform_message_df(df):
-    df = df[df['username'] == st.session_state['username']]
+@st.cache_data
+def transform_message_df(df, username):
+    df = df[df['username'] == username]
     df.drop('username', axis=1, inplace=True)
 
     # Ensure timestamp column is in datetime format
@@ -64,25 +65,28 @@ def transform_message_df(df):
     return sorted_result
 
 
+@st.cache_data
+def get_options_and_captions(messages):
+    options, captions = [], []
+    for m in messages:
+        options.append(m['title'])
+        # retrieve the timestamp of the first message in the conversion
+        captions.append(m['messages'][-1]['timestamp'].strftime("%Y-%m-%d"))
+
+    return options, captions
+
+
 if "conn" not in st.session_state:
     # Create a connection object.
     conn = st.connection("gsheets", type=GSheetsConnection)
     st.session_state.conn = conn
 
 # Initialize chat history
-if "messages" not in st.session_state:
+if "message_df" not in st.session_state:
     st.session_state.message_df = st.session_state.conn.read(worksheet='messages')
-    st.session_state.messages = transform_message_df(st.session_state.message_df)
 
-if 'options' not in st.session_state or 'captions' not in st.session_state:
-    options, captions = [], []
-    for m in st.session_state.messages:
-        options.append(m['title'])
-        # retrieve the timestamp of the first message in the conversion
-        captions.append(m['messages'][-1]['timestamp'].strftime("%Y-%m-%d"))
-
-    st.session_state.options = options
-    st.session_state.captions = captions
+messages = transform_message_df(st.session_state.message_df, st.session_state['username'])
+options, captions = get_options_and_captions(messages)
 
 if 'selected_dialog' not in st.session_state:
     st.session_state.selected_dialog = None
@@ -115,11 +119,11 @@ with st.sidebar:
             use_container_width=True
         )
 
-        if len(st.session_state.options) != 0:
+        if options != 0:
             selected_dialog = st.radio(
                 "對話紀錄",
-                st.session_state.options,
-                captions=st.session_state.captions,
+                options,
+                captions=captions,
                 label_visibility="collapsed",
                 index=None,
                 key='selected_dialog'
@@ -129,7 +133,7 @@ with st.sidebar:
 if st.session_state.selected_dialog is not None:
     title = st.session_state.selected_dialog
     
-    for dialog in st.session_state.messages:
+    for dialog in messages:
         if dialog['title'] != title:
             continue
 
@@ -159,7 +163,7 @@ def add_message_to_database(title, chat_id, content, role):
 
 def update_chat_history(response, role):
     title = st.session_state.selected_dialog
-    for dialog in st.session_state.messages:
+    for dialog in messages:
         if dialog['title'] != title:
             continue
         
@@ -189,9 +193,9 @@ def add_chat_history():
                 }
             ]
         }
-        st.session_state.messages.append(dialog)
-        st.session_state.options.insert(0, title)
-        st.session_state.captions.insert(0, timestamp)
+        # messages.append(dialog)
+        # st.session_state.options.insert(0, title)
+        # st.session_state.captions.insert(0, timestamp)
         st.session_state.selected_dialog = title
     else:
         chat_id = update_chat_history(st.session_state.user_query, 'user')
