@@ -97,13 +97,13 @@ with st.sidebar:
     with option_tab:
         select_model = st.selectbox(
             label="模型", 
-            options=["gpt-4o", "claude-3-opus-20240229"], 
+            options=st.secrets["MODEL_OPTION"], 
             index=0, 
             key="model_selection"
         )
         select_tag = st.selectbox(
             label="文件類別", 
-            options=st.secrets['TAG_OPTION'], 
+            options=st.secrets["TAG_OPTION"], 
             index=0, 
             key="tag_selection"
         )
@@ -119,7 +119,7 @@ with st.sidebar:
             use_container_width=True
         )
 
-        if options != 0:
+        if len(options) != 0:
             selected_dialog = st.radio(
                 "對話紀錄",
                 options,
@@ -181,21 +181,7 @@ def add_chat_history():
     if st.session_state.selected_dialog is None:
         # Add user message to chat history
         title = get_title(st.session_state.user_query)
-        timestamp = datetime.now().strftime("%Y-%m-%d")
         chat_id = uuid.uuid4()
-        dialog = {
-            'chat_id': chat_id,
-            'title': title,
-            'messages': [
-                {
-                    'role': 'user',
-                    'content': st.session_state.user_query
-                }
-            ]
-        }
-        # messages.append(dialog)
-        # st.session_state.options.insert(0, title)
-        # st.session_state.captions.insert(0, timestamp)
         st.session_state.selected_dialog = title
     else:
         chat_id = update_chat_history(st.session_state.user_query, 'user')

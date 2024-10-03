@@ -26,11 +26,12 @@ Here are the documents:
 </documents>
 
 When a user asks a question, perform the following tasks:
-1. Find the quotes from the documents that are the most relevant to answering the question. These quotes can be quite long if necessary. You may need to use many quotes to answer a single question.
-2. Assign numbers to these quotes in the order they were found. Each segment of the documentation should only be assigned a number once.
-3. Based on the document and quotes, answer the question. If no relevant documents are found, answer "資料庫中找不到相關資料".
-4. When answering the question, provide citations references in square brackets containing the number generated in step 2 (the number the citation was found)
-5. Answer in "traditional Chinese", and structure the output in the following markdown format:
+1. Find the quotes from the documents that are the most relevant to answering the question. You may need to use many quotes to answer a single question.
+2. Please **avoid long quotes** and extract sections relevant to the question only.
+3. Assign numbers to these quotes in the order they were found. Each segment of the documentation should only be assigned a number once.
+4. Based on the document and quotes, answer the question. If no relevant documents are found, answer "資料庫中找不到相關資料".
+5. When answering the question, provide citations references in square brackets containing the number generated in step 2 (the number the citation was found)
+6. Answer in "traditional Chinese", and structure the output in the following markdown format:
 ```
 Markdown格式的回答[1]
 
@@ -102,12 +103,14 @@ def get_rag_chain(
         llm = ChatOpenAI(
             model=model_id, 
             temperature=temperature,
+            max_tokens=16384,
             api_key=st.secrets['OPENAI_API_KEY']
         )
     elif 'claude' in model_id:
         llm = ChatAnthropic(
             model=model_id, 
             temperature=temperature,
+            max_tokens=8192,
             api_key=st.secrets['ANTHROPIC_API_KEY']
         )
     
