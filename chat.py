@@ -6,9 +6,12 @@ from streamlit_gsheets import GSheetsConnection
 from langchain_conversational_rag import rag
 from openai import OpenAI
 from datetime import datetime
+from document_manager import DocumentManager
 
 client = OpenAI(api_key=st.secrets['OPENAI_API_KEY'])
 st.cache_data.clear()
+datetime_format = "%Y-%m-%d %H:%M:%S"
+dm = DocumentManager()
 
 def get_title(message):
     prompt = f"請為接下來的訊息產生一個10字以內的標題: {message}"
@@ -29,7 +32,7 @@ def transform_message_df(df, username):
     df.drop('username', axis=1, inplace=True)
 
     # Ensure timestamp column is in datetime format
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
+    df['timestamp'] = pd.to_datetime(df['timestamp'], format=datetime_format)
 
     # Group by chat_id and title, then sort by timestamp
     grouped = df.groupby(['chat_id', 'title'])
@@ -75,15 +78,9 @@ def get_options_and_captions(messages):
 
     return options, captions
 
-
-if "conn" not in st.session_state:
-    # Create a connection object.
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    st.session_state.conn = conn
-
 # Initialize chat history
 if "message_df" not in st.session_state:
-    st.session_state.message_df = st.session_state.conn.read(worksheet='messages')
+    st.session_state.message_df = dm.read("messages")
 
 messages = transform_message_df(st.session_state.message_df, st.session_state['username'])
 options, captions = get_options_and_captions(messages)
@@ -144,13 +141,14 @@ if st.session_state.selected_dialog is not None:
 
 def add_message_to_database(title, chat_id, content, role):
     message_id = uuid.uuid4()
+    timestamp = datetime.now().strftime(datetime_format)
     new_row = [{
         'username': st.session_state['username'],
         'chat_id': chat_id,
         'message_id': message_id,
         'content': content,
         'title': title,
-        'timestamp': datetime.now(),
+        'timestamp': timestamp,
         'role': role
     }]
 
@@ -158,7 +156,7 @@ def add_message_to_database(title, chat_id, content, role):
     new_df = pd.concat([st.session_state.message_df, new_df])
     new_df = new_df.reset_index(drop=True)
     st.session_state.message_df = new_df
-    st.session_state.conn.update(worksheet='messages', data=new_df)
+    dm.update(worksheet='messages', data=new_df)
 
 
 def update_chat_history(response, role):
