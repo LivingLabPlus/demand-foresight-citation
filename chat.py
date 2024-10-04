@@ -9,7 +9,7 @@ from datetime import datetime
 from document_manager import DocumentManager
 
 client = OpenAI(api_key=st.secrets['OPENAI_API_KEY'])
-st.cache_data.clear()
+# st.cache_data.clear()
 datetime_format = "%Y-%m-%d %H:%M:%S"
 dm = DocumentManager()
 
@@ -122,7 +122,6 @@ with st.sidebar:
                 options,
                 captions=captions,
                 label_visibility="collapsed",
-                index=None,
                 key='selected_dialog'
             )
 
@@ -187,7 +186,6 @@ def add_chat_history():
     
     add_message_to_database(title, chat_id, st.session_state.user_query, 'user')
 
-
 # Accept user input
 if prompt := st.chat_input("輸入你的問題", key="user_query", on_submit=add_chat_history):
     _, stream = rag(
@@ -196,7 +194,7 @@ if prompt := st.chat_input("輸入你的問題", key="user_query", on_submit=add
         tag=select_tag, 
         session_id=st.session_state.selected_dialog,
         temperature=temp
-    )    
+    )
 
     # Display assistant response in chat message container
     with st.chat_message("assistant"):
