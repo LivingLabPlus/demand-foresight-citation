@@ -9,7 +9,8 @@ from datetime import datetime
 from document_manager import DocumentManager
 
 client = OpenAI(api_key=st.secrets['OPENAI_API_KEY'])
-# st.cache_data.clear()
+# reload messages from google sheet
+st.cache_data.clear()
 datetime_format = "%Y-%m-%d %H:%M:%S"
 dm = DocumentManager()
 
