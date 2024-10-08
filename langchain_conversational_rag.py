@@ -31,7 +31,7 @@ When a user asks a question, perform the following tasks:
 3. Assign numbers to these quotes in the order they were found. Each segment of the documentation should only be assigned a number once.
 4. Based on the document and quotes, answer the question. If no relevant documents are found, answer "資料庫中找不到相關資料".
 5. When answering the question, provide citations references in square brackets containing the number generated in step 2 (the number the citation was found)
-6. Answer in "traditional Chinese", and structure the output in the following markdown format:
+6. Answer in "traditional Chinese", and structure the output in the following markdown format (without triple backticks):
 ```
 Markdown格式的回答[1]
 
@@ -58,7 +58,7 @@ def get_index(index_name):
     return index
 
 
-def get_retriever(index_name, tag):
+def get_retriever(index_name, tag, document_names):
     model_name = 'text-embedding-3-small'  
     embeddings = OpenAIEmbeddings(model=model_name)    
 
@@ -68,13 +68,17 @@ def get_retriever(index_name, tag):
         index, embeddings, text_field  
     )
 
-    search_kwargs = {"k": 20}
-    if tag != '全':
-        search_kwargs['filter'] = {
+    search_kwargs = {
+        "k": 20,
+        "filter": {
             'tag': {
                 '$eq': tag
+            },
+            "name": {
+                "$in": document_names
             }
         }
+    }
 
     retriever = vectorstore.as_retriever(search_kwargs=search_kwargs)
     return retriever
@@ -95,10 +99,11 @@ def format_docs(docs):
 def get_rag_chain(
     model_id,
     tag, 
+    document_names,
     temperature=0, 
     index_name='demand-foresight'
 ):
-    retriever = get_retriever(index_name, tag)
+    retriever = get_retriever(index_name, tag, document_names)
     if 'gpt' in model_id:
         llm = ChatOpenAI(
             model=model_id, 
@@ -154,13 +159,15 @@ def get_session_history(session_id):
 def rag(
     question, 
     model_id,
-    tag='整體', 
+    tag,
+    document_names,
     session_id=None, 
     temperature=0
 ):
     rag_chain = get_rag_chain(
         model_id,
         tag,
+        document_names,
         temperature=temperature,
         index_name=st.secrets['INDEX_NAME']
     )

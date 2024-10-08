@@ -72,19 +72,38 @@ def transform_message_df(df, username):
 @st.cache_data
 def get_options_and_captions(messages):
     options, captions = [], []
-    for m in messages:
+    sorted_messages = sorted(messages, key=lambda x: x['messages'][-1]['timestamp'], reverse=True)
+    
+    for m in sorted_messages:
         options.append(m['title'])
         # retrieve the timestamp of the first message in the conversion
         captions.append(m['messages'][-1]['timestamp'].strftime("%Y-%m-%d"))
 
     return options, captions
 
+
+@st.cache_data
+def get_user_document_names(username, user_documents, documents):
+    document_ids = user_documents[user_documents["username"] == username]["document_id"].tolist()
+    names = documents[documents["document_id"].isin(document_ids)]["title"].tolist()
+    return names
+
+if "user_documents" not in st.session_state:
+    st.session_state.user_documents = dm.read(worksheet="userDocuments")
+
+if "documents" not in st.session_state:
+    st.session_state.documents = dm.read(worksheet="documents")
+
 # Initialize chat history
 if "message_df" not in st.session_state:
     st.session_state.message_df = dm.read("messages")
+    
+if "messages" not in st.session_state:
+    st.session_state.messages = transform_message_df(st.session_state.message_df, st.session_state.username)
 
-messages = transform_message_df(st.session_state.message_df, st.session_state['username'])
-options, captions = get_options_and_captions(messages)
+# print("message_df:", st.session_state.message_df)
+# print("messages:", json.dumps(st.session_state.messages))
+options, captions = get_options_and_captions(st.session_state.messages)
 
 if 'selected_dialog' not in st.session_state:
     st.session_state.selected_dialog = None
@@ -130,7 +149,7 @@ with st.sidebar:
 if st.session_state.selected_dialog is not None:
     title = st.session_state.selected_dialog
     
-    for dialog in messages:
+    for dialog in st.session_state.messages:
         if dialog['title'] != title:
             continue
 
@@ -156,18 +175,18 @@ def add_message_to_database(title, chat_id, content, role):
     new_df = pd.concat([st.session_state.message_df, new_df])
     new_df = new_df.reset_index(drop=True)
     st.session_state.message_df = new_df
-    dm.update(worksheet='messages', data=new_df)
 
 
 def update_chat_history(response, role):
     title = st.session_state.selected_dialog
-    for dialog in messages:
+    for dialog in st.session_state.messages:
         if dialog['title'] != title:
             continue
         
         dialog['messages'].append({
             'role': role,
-            'content': response
+            'content': response,
+            'timestamp': datetime.now()
         })
         return dialog['chat_id']
     
@@ -181,18 +200,36 @@ def add_chat_history():
         title = get_title(st.session_state.user_query)
         chat_id = uuid.uuid4()
         st.session_state.selected_dialog = title
+        dialog = {
+            'chat_id': chat_id,
+            'title': title,
+            'messages': [{
+                'role': 'user',
+                'content': st.session_state.user_query,
+                'timestamp': datetime.now()
+            }]
+        }
+        st.session_state.messages.append(dialog)
     else:
-        chat_id = update_chat_history(st.session_state.user_query, 'user')
-        title = st.session_state.selected_dialog
+        update_chat_history(st.session_state.user_query, 'user')
+    # else:
+    #     chat_id = update_chat_history(st.session_state.user_query, 'user')
+    #     title = st.session_state.selected_dialog
     
-    add_message_to_database(title, chat_id, st.session_state.user_query, 'user')
+    # add_message_to_database(title, chat_id, st.session_state.user_query, 'user')
 
 # Accept user input
 if prompt := st.chat_input("輸入你的問題", key="user_query", on_submit=add_chat_history):
+    document_names = get_user_document_names(
+        st.session_state.username,
+        st.session_state.user_documents,
+        st.session_state.documents
+    )
     _, stream = rag(
         prompt,
         model_id=select_model,
-        tag=select_tag, 
+        tag=select_tag,
+        document_names=document_names,
         session_id=st.session_state.selected_dialog,
         temperature=temp
     )
@@ -212,4 +249,6 @@ if prompt := st.chat_input("輸入你的問題", key="user_query", on_submit=add
         
     chat_id = update_chat_history(response, 'assistant')
     title = st.session_state.selected_dialog
+    add_message_to_database(title, chat_id, st.session_state.user_query, 'user')
     add_message_to_database(title, chat_id, response, 'assistant')
+    dm.update(worksheet='messages', data=st.session_state.message_df)

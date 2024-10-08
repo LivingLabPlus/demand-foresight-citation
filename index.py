@@ -40,9 +40,15 @@ if st.secrets.modules.authentication:
 
     if authentication_status:
         st.session_state['username'] = username
+        st.session_state['authenticator'] = authenticator
         run_navigation(pages)
     else:
         run_navigation([st.Page(empty_page)])
+        
+        # Ensure chat history would be updated after switching user
+        if 'messages' in st.session_state:
+            st.session_state.pop('messages')
+        
         if authentication_status is False:
             st.error('使用者名稱/密碼不正確')
 else:
