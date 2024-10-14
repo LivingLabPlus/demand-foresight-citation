@@ -1,18 +1,21 @@
+cookie:
+  expiry_days: 30
+  key: demand_foresight_signature_key
+  name: demand_foresight_user_session
 credentials:
   usernames:
+    admin:
+      name: Admin
+      password: $2b$12$XsR..0IKUmorsS.262MTD.9sm8q0vGy/Lw1ILffUxFytoSIeY.4au
     jsmith:
       email: jsmith@gmail.com
-      failed_login_attempts: 0 # Will be managed automatically
-      logged_in: False # Will be managed automatically
+      failed_login_attempts: 0
+      logged_in: false
       name: John Smith
       password: $2b$12$dA.U/nB8v2REqzrqn2O9RO2dCnOMSJaKJXmdO6TE9zSV4zCHdzWYS
     rbriggs:
       email: rbriggs@gmail.com
-      failed_login_attempts: 0 # Will be managed automatically
-      logged_in: False # Will be managed automatically
+      failed_login_attempts: 0
+      logged_in: false
       name: Rebecca Briggs
       password: $2b$12$inSYwVQNdwtirlQKQYV4SeWFiD7C34zsoD8mCr8s1FTIdbTppTPCG
-cookie:
-  expiry_days: 30
-  key: demand_foresight_signature_key # Must be string
-  name: demand_foresight_user_session

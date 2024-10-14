@@ -1,48 +1,137 @@
 import streamlit as st
+import pandas as pd
 import time
+import uuid
 from streamlit_gsheets import GSheetsConnection
 
-class DocumentManager:
-    def __init__(self):
-        if "conn" not in st.session_state:
-            # Create a connection object.
-            conn = st.connection("gsheets", type=GSheetsConnection)
-            st.session_state.conn = conn
-        self.conn = st.session_state.conn 
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
-    def read(self, worksheet):
+
+class DocumentManager:
+    @staticmethod
+    def get_service():
+        SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+
+        # Create credentials from the dictionary
+        creds = service_account.Credentials.from_service_account_info(
+            st.secrets['connection']['credentials'], scopes=SCOPES
+        )
+
+        # Initialize the Sheets API client
+        service = build('sheets', 'v4', credentials=creds)
+
+        return service
+
+    @staticmethod
+    def read(worksheet_name):
         try:
-            df = self.conn.read(worksheet=worksheet)
+            service = DocumentManager.get_service()
+
+            # Define the range to fetch data from
+            range_name = f"{worksheet_name}"
+
+            # Get the data from the Google Sheet
+            result = service.spreadsheets().values().get(
+                spreadsheetId=st.secrets['connection']['spreadsheet_id'],
+                range=range_name
+            ).execute()
+
+            # Extract the rows and convert to a DataFrame
+            rows = result.get('values', [])
+            if not rows:
+                return pd.DataFrame()  # Return an empty DataFrame if no data
+
+            # Convert rows to DataFrame, assuming the first row contains headers
+            df = pd.DataFrame(rows[1:], columns=rows[0])
             return df
-        except:
-            st.error(f"Failed to read worksheet: {worksheet}")
+        except Exception as e:
+            print("Exception:", e)
+            st.error(f"目前無法讀取資料，請稍候並重新整理")
             return None
 
-    def update(self, worksheet, data, retries=3, delay=5):
-        """
-        Update Google Sheets with retry logic in case of failures.
+    @staticmethod
+    def append_rows(worksheet_name, rows_data):
+        # Define the range to append data to
+        range_name = f"{worksheet_name}"
 
-        Parameters:
-        worksheet (str): Name of the worksheet to update.
-        new_df (pandas.DataFrame): DataFrame to update in the Google Sheet.
-        retries (int): Number of retry attempts (default is 3).
-        delay (int): Delay between retries in seconds (default is 5 seconds).
-        
-        Returns:
-        bool: True if successful, False if all retries failed.
-        """
-        attempt = 0
-        while attempt < retries:
-            try:
-                self.conn.update(worksheet=worksheet, data=data)
-                # st.success(f"Successfully updated Google Sheet on attempt {attempt + 1}.")
-                return True
-            except Exception as e:
-                attempt += 1
-                # st.warning(f"Attempt {attempt} failed with error: {e}")
-                if attempt < retries:
-                    # st.info(f"Retrying in {delay} seconds...")
-                    time.sleep(delay)  # Wait before retrying
-                else:
-                    st.error(f"Failed to update Google Sheet after {retries} attempts.")
-                    return False
+        try:
+            service = DocumentManager.get_service()
+
+            # Append the row to the Google Sheet
+            request = service.spreadsheets().values().append(
+                spreadsheetId=st.secrets['connection']['spreadsheet_id'],
+                range=range_name,
+                # Use "USER_ENTERED" if you want Google Sheets to evaluate formulas
+                valueInputOption="RAW",
+                insertDataOption="INSERT_ROWS",
+                body={"values": rows_data}
+            )
+            response = request.execute()
+            return response
+        except HttpError as error:
+            st.error(f"錯誤: {error}")
+            return error
+
+    @staticmethod
+    def delete_rows(worksheet_name, row_indices):
+        try:
+            service = DocumentManager.get_service()
+
+            # Retrieve the sheet ID based on the worksheet name
+            spreadsheet = service.spreadsheets().get(
+                spreadsheetId=st.secrets['connection']['spreadsheet_id']
+            ).execute()
+            sheet_id = None
+            for sheet in spreadsheet['sheets']:
+                if sheet['properties']['title'] == worksheet_name:
+                    sheet_id = sheet['properties']['sheetId']
+                    break
+
+            if sheet_id is None:
+                print(
+                    f"Worksheet name '{worksheet_name}' not found in the spreadsheet.")
+                return None
+
+            # Sort row indices in descending order
+            row_indices = sorted(row_indices, reverse=True)
+
+            # Create a request to delete the specified row in the Google Sheet
+            batch_update_request = {
+                "requests": [
+                    {
+                        "deleteDimension": {
+                            "range": {
+                                "sheetId": sheet_id,
+                                "dimension": "ROWS",
+                                # Start index of the row to delete (0-based)
+                                "startIndex": row_index + 1,
+                                "endIndex": row_index + 2  # End index, exclusive
+                            }
+                        }
+                    } for row_index in row_indices
+                ]
+            }
+
+            # Send the batch update request to delete the row
+            response = service.spreadsheets().batchUpdate(
+                spreadsheetId=st.secrets["connection"]["spreadsheet_id"],
+                body=batch_update_request
+            ).execute()
+
+            return response
+        except HttpError as error:
+            st.error(f"錯誤: {error}")
+            return error
+
+    @staticmethod
+    def get_documents_by_user(documents, user_documents, username):
+        document_ids = user_documents[
+            user_documents["username"] == username
+        ]["document_id"].tolist()
+
+        documents_for_user = documents[
+            documents["document_id"].isin(document_ids)
+        ]
+        return documents_for_user.reset_index(drop=True)

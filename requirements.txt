@@ -7,3 +7,6 @@ langchain-pinecone==0.1.1
 st-gsheets-connection==0.1.0
 PyPDF2==3.0.1
 streamlit-authenticator==0.3.3
+pycryptodome==3.21.0
+google-auth-httplib2 
+google-api-python-client

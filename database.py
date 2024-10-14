@@ -10,38 +10,22 @@ from pathlib import Path
 from openai import OpenAI
 from tqdm import tqdm
 from time import sleep
+from document_manager import DocumentManager
 
 openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
 
-@st.cache_data
-def display_documents(df):
-    return df[["title", "tag"]]
+with st.spinner("讀取資料中..."):
+    if "user_documents" not in st.session_state:
+        st.session_state.user_documents = DocumentManager.read("userDocuments")
 
-@st.cache_data
-def filter_df_by_username(df):
-    return df[df["username"] == st.session_state.username]
-
-@st.cache_data
-def filter_df_by_document_ids(df, document_ids):
-    return df[df["document_id"].isin(document_ids)]
-
-
-if "conn" not in st.session_state:
-    # Create a connection object.
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    st.session_state.conn = conn
-
-if "user_documents" not in st.session_state:
-    st.session_state.user_documents = st.session_state.conn.read(worksheet="userDocuments")
-
-user_user_documents = filter_df_by_username(st.session_state.user_documents)
-document_ids = user_user_documents["document_id"].tolist()
-if "documents" not in st.session_state:
-    st.session_state.documents = st.session_state.conn.read(worksheet="documents")
-
-if "vectors" not in st.session_state:
-    st.session_state.vectors = st.session_state.conn.read(worksheet="vectors")
+    if "documents" not in st.session_state:
+        documents = DocumentManager.read("documents")
+        st.session_state.documents = DocumentManager.get_documents_by_user(
+            documents,
+            st.session_state.user_documents,
+            st.session_state.username
+        )
 
 if "upload_success" in st.session_state and st.session_state.upload_success:
     st.toast("資料上傳成功！", icon="✅")
@@ -52,52 +36,18 @@ if "delete_success" in st.session_state and st.session_state.delete_success:
     st.session_state.delete_success = 0
 
 
-column_configuration = {
-    "title": st.column_config.TextColumn(
-        "文件名稱", help="文件名稱", max_chars=1024, width="large"
-    ),
-    "tag": st.column_config.SelectboxColumn(
-        "標籤",
-        help="文件類別",
-        width="small",
-        options=[
-            "AI",
-            "能源",
-        ],
-        required=True
-    ),
-}
-
-st.header("資料庫")
-user_documents = filter_df_by_document_ids(st.session_state.documents, document_ids)
-displayed_documents = display_documents(user_documents)
-event = st.dataframe(
-    displayed_documents,
-    column_config=column_configuration,
-    use_container_width=True,
-    hide_index=True,
-    on_select="rerun",
-    selection_mode="multi-row",
-)
-
-
 def delete_pinecone_documents(index):
     selected_indices = event.selection.rows
-    selected_document_ids = st.session_state.documents.loc[selected_indices, "document_id"].tolist()
-    filtered_df = st.session_state.vectors[
-        st.session_state.vectors["document_id"].isin(selected_document_ids)
-    ]
+    selected_document_ids = st.session_state.documents.loc[
+        selected_indices, "document_id"
+    ].tolist()
+    vectors = DocumentManager.read("vectors")
+    filtered_df = vectors[vectors["document_id"].isin(selected_document_ids)]
     vector_ids = filtered_df["vector_id"].tolist()
-    
-    for i in range(0, len(vector_ids), 1000):
-        batch_ids = vector_ids[i : i + 1000]
-        index.delete(ids=batch_ids)
 
-    new_vectors_df = st.session_state.vectors[
-        ~st.session_state.vectors["document_id"].isin(selected_document_ids)
-    ]
-    st.session_state.conn.update(worksheet="vectors", data=new_vectors_df)
-    st.session_state.vectors = new_vectors_df
+    for i in range(0, len(vector_ids), 1000):
+        batch_ids = vector_ids[i: i + 1000]
+        index.delete(ids=batch_ids)
 
 
 @st.dialog("刪除文件")
@@ -110,20 +60,44 @@ def delete_documents():
 
     if st.button("確認"):
         index = get_index(st.secrets["INDEX_NAME"])
-        with st.spinner(text="刪除中..."):    
+        with st.spinner(text="刪除中..."):
             delete_pinecone_documents(index)
-            filtered_documents = st.session_state.documents.drop(selected_indices)
+
+            # update sheet "vectors"
+            vectors = DocumentManager.read("vectors")
+            selected_document_ids = st.session_state.documents.loc[
+                selected_indices, "document_id"
+            ].tolist()
+            row_indices = vectors.index[
+                vectors["document_id"].isin(selected_document_ids)
+            ].tolist()
+            DocumentManager.delete_rows("vectors", row_indices)
+
+            # update sheet "documents"
+            documents = DocumentManager.read("documents")
+            row_indices = documents.index[
+                documents["document_id"].isin(selected_document_ids)
+            ].tolist()
+            DocumentManager.delete_rows("documents", row_indices)
+
+            filtered_documents = st.session_state.documents.drop(
+                selected_indices)
             filtered_documents = filtered_documents.reset_index(drop=True)
-            st.session_state.conn.update(worksheet="documents", data=filtered_documents)
+            st.session_state.documents = filtered_documents
 
-            document_ids = st.session_state.documents.loc[selected_indices, "document_id"].tolist()
+            # update sheet "userDocuments"
+            user_doc = DocumentManager.read("userDocuments")
             username = st.session_state.username
-            user_doc = st.session_state.user_documents
-            filtered_user_documents = user_doc[~((user_doc["username"] == username) & (user_doc["document_id"].isin(document_ids)))]
-            st.session_state.conn.update(worksheet="userDocuments", data=filtered_user_documents)
+            row_indices = user_doc.index[
+                (user_doc["document_id"].isin(selected_document_ids))
+            ]
+            DocumentManager.delete_rows("userDocuments", row_indices)
 
-        st.session_state.documents = filtered_documents
-        st.session_state.user_documents = filtered_user_documents
+            filtered_user_documents = user_doc[
+                ~(user_doc["document_id"].isin(selected_document_ids))
+            ].reset_index(drop=True)
+            st.session_state.user_documents = filtered_user_documents
+
         st.session_state.delete_success = 1
         st.rerun()
 
@@ -145,7 +119,7 @@ def get_index(index_name):
     spec = ServerlessSpec(
         cloud="aws", region="us-east-1"
     )
-    
+
     existing_indexes = [
         index_info["name"] for index_info in pc.list_indexes()
     ]
@@ -198,10 +172,10 @@ def get_embeddings(texts, model="text-embedding-3-small"):
 def upsert_documents(index, documents, batch_size=64):
     id_list = []
     for i in tqdm(range(0, len(documents), batch_size)):
-        docs = documents[i : i + batch_size]
+        docs = documents[i: i + batch_size]
         contents = [doc["content"] for doc in docs]
         embeddings = get_embeddings(contents)
-        
+
         if embeddings is None:
             doc_name = docs[0]["name"]
             print(f"cannot encode {doc_name} page {i}-{i + batch_size}")
@@ -227,25 +201,18 @@ def upload_document_to_google_sheet(id_list, title, tag):
     new_df = new_df.reset_index(drop=True)
     st.session_state.documents = new_df
 
-    # update sheet "documents" 
-    st.session_state.conn.update(worksheet="documents", data=new_df)
-
-    new_vectors = [{
-        "document_id": document_id,
-        "vector_id": vector_id
-    } for vector_id in id_list]
-    new_df = pd.DataFrame(new_vectors)
-    new_df = pd.concat([st.session_state.vectors, new_df])
-    new_df = new_df.reset_index(drop=True)
-    st.session_state.vectors = new_df
+    # update sheet "documents"
+    DocumentManager.append_rows("documents", [list(new_row[0].values())])
 
     # update sheet "vectors"
-    st.session_state.conn.update(worksheet="vectors", data=new_df)
+    new_vectors = [[document_id, vector_id] for vector_id in id_list]
+    DocumentManager.append_rows("vectors", new_vectors)
 
+    # update local data
     new_row = [{
         "id": str(uuid.uuid4()),
         "username": st.session_state["username"],
-        "document_id": document_id,	
+        "document_id": document_id,
         "access_level": "write",
     }]
     new_df = pd.DataFrame(new_row)
@@ -253,8 +220,8 @@ def upload_document_to_google_sheet(id_list, title, tag):
     new_df = new_df.reset_index(drop=True)
     st.session_state.user_documents = new_df
 
-    # update sheet "userDocuments" 
-    st.session_state.conn.update(worksheet="userDocuments", data=new_df)
+    # update sheet "userDocuments"
+    DocumentManager.append_rows("userDocuments", [list(new_row[0].values())])
 
 
 @st.dialog("上傳文件")
@@ -263,17 +230,18 @@ def upload_document():
     if "全" in options:
         options.remove("全")
 
-    uploaded_files = st.file_uploader("選取檔案", accept_multiple_files=True, type="pdf")
+    uploaded_files = st.file_uploader(
+        "選取檔案", accept_multiple_files=True, type="pdf")
     tag = st.selectbox("選取文件類別", options)
 
     titles = [Path(file.name).stem for file in uploaded_files]
-    matching_titles = displayed_documents[
-        displayed_documents["title"].isin(titles)
+    matching_titles = st.session_state.documents[
+        st.session_state.documents["title"].isin(titles)
     ]["title"].tolist()
-    
+
     if len(matching_titles) != 0:
         st.error(f"「{matching_titles[0]}」已經在資料庫中！")
-    
+
     disabled = (len(matching_titles) != 0) or (len(uploaded_files) == 0)
 
     if st.button("提交", disabled=disabled, key="submit_button"):
@@ -286,37 +254,96 @@ def upload_document():
         for i, uploaded_file in enumerate(uploaded_files):
             title = Path(uploaded_file.name).stem
             bytes_data = uploaded_file.getvalue()
-            
+
             data = load_pdf(bytes_data, tag, title)
-            
+
             current_stage += 1
             my_bar.progress(current_stage / total_stage, text=progress_text)
             id_list = upsert_documents(index, data)
-            
+
             # update data on Google sheet
             current_stage += 1
             my_bar.progress(current_stage / total_stage, text=progress_text)
             upload_document_to_google_sheet(id_list, title, tag)
-            
+
             current_stage += 1
             my_bar.progress(current_stage / total_stage, text=progress_text)
 
         my_bar.empty()
-        # st.session_state.displayed_documents = display_documents(st.session_state.documents)
         st.session_state.upload_success = 1
         st.rerun()
 
 
-columns = st.columns([1] * 9)
-with columns[0]:
-    st.button(label="上傳", on_click=upload_document, key="upload_button")
+@st.cache_data
+def get_documents_by_permission(documents, user_documents):
+    df = user_documents[
+        (user_documents["username"] == st.session_state.username)
+    ]
 
-with columns[1]:
-    disabled = not bool(event.selection.rows)
-    st.button(
-        "刪除", 
-        type="primary", 
-        on_click=delete_documents,
-        disabled=disabled,
-        key="delete_button"
+    my_document_ids = df[
+        df["access_level"] == "write"
+    ]["document_id"].tolist()
+    shared_document_ids = df[
+        df["access_level"] == "read"
+    ]["document_id"].tolist()
+
+    my_documents = documents[
+        documents["document_id"].isin(my_document_ids)
+    ].reset_index(drop=True)
+    shared_documents = documents[
+        documents["document_id"].isin(shared_document_ids)
+    ].reset_index(drop=True)
+
+    return my_documents, shared_documents
+
+
+column_configuration = {
+    "document_id": None,
+    "title": st.column_config.TextColumn(
+        "文件名稱", help="文件名稱", max_chars=1024, width="large"
+    ),
+    "tag": st.column_config.TextColumn(
+        "標籤",
+        help="文件類別",
+        width="small",
+    ),
+}
+
+st.header("資料庫")
+my_document_tab, shared_document_tab = st.tabs(["我的文件", "共用文件"])
+my_documents, shared_documents = get_documents_by_permission(
+    st.session_state.documents, st.session_state.user_documents
+)
+
+with my_document_tab:
+    event = st.dataframe(
+        my_documents,
+        column_config=column_configuration,
+        use_container_width=True,
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="multi-row",
+    )
+
+    columns = st.columns([1] * 9)
+    with columns[0]:
+        st.button(label="上傳", on_click=upload_document, key="upload_button")
+
+    with columns[1]:
+        disabled = not bool(event.selection.rows)
+        st.button(
+            "刪除",
+            type="primary",
+            on_click=delete_documents,
+            disabled=disabled,
+            key="delete_button"
+        )
+
+with shared_document_tab:
+    st.dataframe(
+        shared_documents,
+        column_config=column_configuration,
+        use_container_width=True,
+        hide_index=True,
+        on_select="ignore"
     )

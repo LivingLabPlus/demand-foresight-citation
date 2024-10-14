@@ -3,6 +3,7 @@ import uuid
 import pandas as pd
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
+from googleapiclient.errors import HttpError
 from langchain_conversational_rag import rag
 from openai import OpenAI
 from datetime import datetime
@@ -12,7 +13,7 @@ client = OpenAI(api_key=st.secrets['OPENAI_API_KEY'])
 # reload messages from google sheet
 st.cache_data.clear()
 datetime_format = "%Y-%m-%d %H:%M:%S"
-dm = DocumentManager()
+
 
 def get_title(message):
     prompt = f"請為接下來的訊息產生一個10字以內的標題: {message}"
@@ -30,7 +31,7 @@ def get_title(message):
 @st.cache_data
 def transform_message_df(df, username):
     df = df[df['username'] == username]
-    df.drop('username', axis=1, inplace=True)
+    df = df.loc[:, df.columns != 'username']  # Drop without inplace=True
 
     # Ensure timestamp column is in datetime format
     df['timestamp'] = pd.to_datetime(df['timestamp'], format=datetime_format)
@@ -42,7 +43,8 @@ def transform_message_df(df, username):
     result = []
 
     for (chat_id, title), group in grouped:
-        messages = group[['role', 'content', 'timestamp']].sort_values('timestamp').to_dict(orient='records')
+        messages = group[['role', 'content', 'timestamp']].sort_values(
+            'timestamp').to_dict(orient='records')
         chat_entry = {
             'chat_id': chat_id,
             'title': title,
@@ -65,15 +67,17 @@ def transform_message_df(df, username):
     #     }
     # ]
 
-    sorted_result = sorted(result, key=lambda x: x['messages'][-1]['timestamp'], reverse=True)
+    sorted_result = sorted(
+        result, key=lambda x: x['messages'][-1]['timestamp'], reverse=True)
     return sorted_result
 
 
 @st.cache_data
 def get_options_and_captions(messages):
     options, captions = [], []
-    sorted_messages = sorted(messages, key=lambda x: x['messages'][-1]['timestamp'], reverse=True)
-    
+    sorted_messages = sorted(
+        messages, key=lambda x: x['messages'][-1]['timestamp'], reverse=True)
+
     for m in sorted_messages:
         options.append(m['title'])
         # retrieve the timestamp of the first message in the conversion
@@ -82,27 +86,30 @@ def get_options_and_captions(messages):
     return options, captions
 
 
-@st.cache_data
-def get_user_document_names(username, user_documents, documents):
-    document_ids = user_documents[user_documents["username"] == username]["document_id"].tolist()
-    names = documents[documents["document_id"].isin(document_ids)]["title"].tolist()
-    return names
+with st.spinner("讀取資料中..."):
+    if "user_documents" not in st.session_state:
+        st.session_state.user_documents = DocumentManager.read("userDocuments")
 
-if "user_documents" not in st.session_state:
-    st.session_state.user_documents = dm.read(worksheet="userDocuments")
+    if "documents" not in st.session_state:
+        documents = DocumentManager.read("documents")
+        if documents is None:
+            st.session_state.documents = pd.DataFrame()
+        else:
+            st.session_state.documents = DocumentManager.get_documents_by_user(
+                documents,
+                st.session_state.user_documents,
+                st.session_state.username
+            )
 
-if "documents" not in st.session_state:
-    st.session_state.documents = dm.read(worksheet="documents")
+    # Initialize chat history
+    if "messages" not in st.session_state:
+        messages = DocumentManager.read("messages")
+        if messages is not None:
+            st.session_state.messages = transform_message_df(
+                messages, st.session_state.username)
+        else:
+            st.session_state.messages = []
 
-# Initialize chat history
-if "message_df" not in st.session_state:
-    st.session_state.message_df = dm.read("messages")
-    
-if "messages" not in st.session_state:
-    st.session_state.messages = transform_message_df(st.session_state.message_df, st.session_state.username)
-
-# print("message_df:", st.session_state.message_df)
-# print("messages:", json.dumps(st.session_state.messages))
 options, captions = get_options_and_captions(st.session_state.messages)
 
 if 'selected_dialog' not in st.session_state:
@@ -113,25 +120,26 @@ with st.sidebar:
 
     with option_tab:
         select_model = st.selectbox(
-            label="模型", 
-            options=st.secrets["MODEL_OPTION"], 
-            index=0, 
+            label="模型",
+            options=st.secrets["MODEL_OPTION"],
+            index=0,
             key="model_selection"
         )
         select_tag = st.selectbox(
-            label="文件類別", 
-            options=st.secrets["TAG_OPTION"], 
-            index=0, 
+            label="文件類別",
+            options=st.secrets["TAG_OPTION"],
+            index=0,
             key="tag_selection"
         )
-        temp = st.slider("Temperature", min_value=0.00 , max_value=1.0, step=0.01, key="temperature")
+        temp = st.slider("Temperature", min_value=0.00,
+                         max_value=1.0, step=0.01, key="temperature")
 
     with history_tab:
         def new_chat():
             st.session_state.selected_dialog = None
 
         st.button(
-            "新對話", 
+            "新對話",
             on_click=new_chat,
             use_container_width=True
         )
@@ -148,33 +156,31 @@ with st.sidebar:
 # display selected dialogue
 if st.session_state.selected_dialog is not None:
     title = st.session_state.selected_dialog
-    
+
     for dialog in st.session_state.messages:
         if dialog['title'] != title:
             continue
 
-        for message in dialog['messages']:                
+        for message in dialog['messages']:
             with st.chat_message(message['role']):
                 st.markdown(message['content'])
 
 
 def add_message_to_database(title, chat_id, content, role):
-    message_id = uuid.uuid4()
+    message_id = str(uuid.uuid4())
     timestamp = datetime.now().strftime(datetime_format)
-    new_row = [{
-        'username': st.session_state['username'],
-        'chat_id': chat_id,
-        'message_id': message_id,
-        'content': content,
-        'title': title,
-        'timestamp': timestamp,
-        'role': role
-    }]
 
-    new_df = pd.DataFrame(new_row)
-    new_df = pd.concat([st.session_state.message_df, new_df])
-    new_df = new_df.reset_index(drop=True)
-    st.session_state.message_df = new_df
+    new_rows = [[
+        st.session_state['username'],
+        str(chat_id),
+        message_id,
+        content,
+        title,
+        timestamp,
+        role,
+    ]]
+
+    DocumentManager.append_rows('messages', new_rows)
 
 
 def update_chat_history(response, role):
@@ -182,14 +188,14 @@ def update_chat_history(response, role):
     for dialog in st.session_state.messages:
         if dialog['title'] != title:
             continue
-        
+
         dialog['messages'].append({
             'role': role,
             'content': response,
             'timestamp': datetime.now()
         })
         return dialog['chat_id']
-    
+
     return None
 
 
@@ -212,19 +218,11 @@ def add_chat_history():
         st.session_state.messages.append(dialog)
     else:
         update_chat_history(st.session_state.user_query, 'user')
-    # else:
-    #     chat_id = update_chat_history(st.session_state.user_query, 'user')
-    #     title = st.session_state.selected_dialog
-    
-    # add_message_to_database(title, chat_id, st.session_state.user_query, 'user')
+
 
 # Accept user input
 if prompt := st.chat_input("輸入你的問題", key="user_query", on_submit=add_chat_history):
-    document_names = get_user_document_names(
-        st.session_state.username,
-        st.session_state.user_documents,
-        st.session_state.documents
-    )
+    document_names = st.session_state.documents["title"].tolist()
     _, stream = rag(
         prompt,
         model_id=select_model,
@@ -243,12 +241,12 @@ if prompt := st.chat_input("輸入你的問題", key="user_query", on_submit=add
                         print(c.metadata)
 
                 if answer_chunk := chunk.get("answer"):
-                    yield(answer_chunk)
+                    yield (answer_chunk)
 
         response = st.write_stream(generate_response)
-        
+
     chat_id = update_chat_history(response, 'assistant')
     title = st.session_state.selected_dialog
-    add_message_to_database(title, chat_id, st.session_state.user_query, 'user')
+    add_message_to_database(
+        title, chat_id, st.session_state.user_query, 'user')
     add_message_to_database(title, chat_id, response, 'assistant')
-    dm.update(worksheet='messages', data=st.session_state.message_df)
