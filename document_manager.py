@@ -48,31 +48,25 @@ class DocumentManager:
             return df
         except Exception as e:
             print("Exception:", e)
-            st.error(f"目前無法讀取資料，請稍候並重新整理")
             return None
 
     @staticmethod
     def append_rows(worksheet_name, rows_data):
         # Define the range to append data to
         range_name = f"{worksheet_name}"
+        service = DocumentManager.get_service()
 
-        try:
-            service = DocumentManager.get_service()
-
-            # Append the row to the Google Sheet
-            request = service.spreadsheets().values().append(
-                spreadsheetId=st.secrets['connection']['spreadsheet_id'],
-                range=range_name,
-                # Use "USER_ENTERED" if you want Google Sheets to evaluate formulas
-                valueInputOption="RAW",
-                insertDataOption="INSERT_ROWS",
-                body={"values": rows_data}
-            )
-            response = request.execute()
-            return response
-        except HttpError as error:
-            st.error(f"錯誤: {error}")
-            return error
+        # Append the row to the Google Sheet
+        request = service.spreadsheets().values().append(
+            spreadsheetId=st.secrets['connection']['spreadsheet_id'],
+            range=range_name,
+            # Use "USER_ENTERED" if you want Google Sheets to evaluate formulas
+            valueInputOption="RAW",
+            insertDataOption="INSERT_ROWS",
+            body={"values": rows_data}
+        )
+        response = request.execute()
+        return response
 
     @staticmethod
     def delete_rows(worksheet_name, row_indices):
@@ -127,6 +121,10 @@ class DocumentManager:
 
     @staticmethod
     def get_documents_by_user(documents, user_documents, username):
+        # return None when cannot retrieve documents from database
+        if documents is None or user_documents is None:
+            return None
+
         document_ids = user_documents[
             user_documents["username"] == username
         ]["document_id"].tolist()

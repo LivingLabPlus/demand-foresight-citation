@@ -13,6 +13,7 @@ client = OpenAI(api_key=st.secrets['OPENAI_API_KEY'])
 # reload messages from google sheet
 st.cache_data.clear()
 datetime_format = "%Y-%m-%d %H:%M:%S"
+disable_chat_input = False
 
 
 def get_title(message):
@@ -85,6 +86,11 @@ def get_options_and_captions(messages):
 
     return options, captions
 
+
+if (("user_documents" in st.session_state and st.session_state.user_documents is None)
+        or ("documents" in st.session_state and st.session_state.documents is None)):
+    st.error("無法讀取資料，請稍候並重新整理")
+    disable_chat_input = True
 
 with st.spinner("讀取資料中..."):
     if "user_documents" not in st.session_state:
@@ -221,7 +227,8 @@ def add_chat_history():
 
 
 # Accept user input
-if prompt := st.chat_input("輸入你的問題", key="user_query", on_submit=add_chat_history):
+if prompt := st.chat_input("輸入你的問題", key="user_query",
+                           on_submit=add_chat_history, disabled=disable_chat_input):
     document_names = st.session_state.documents["title"].tolist()
     _, stream = rag(
         prompt,

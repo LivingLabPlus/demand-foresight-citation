@@ -9,6 +9,7 @@ from pinecone import Pinecone, ServerlessSpec
 from pathlib import Path
 from openai import OpenAI
 from tqdm import tqdm
+from stqdm import stqdm
 from time import sleep
 from document_manager import DocumentManager
 
@@ -27,9 +28,18 @@ with st.spinner("讀取資料中..."):
             st.session_state.username
         )
 
-if "upload_success" in st.session_state and st.session_state.upload_success:
-    st.toast("資料上傳成功！", icon="✅")
-    st.session_state.upload_success = 0
+if "upload_failure" in st.session_state:
+    if len(st.session_state.upload_failure) == 0:
+        st.toast("資料上傳成功！", icon="✅")
+    else:
+        for doc in st.session_state.upload_failure:
+            st.toast(f"無法上傳文件「{doc}」，請稍後再試", icon="❌")
+
+    st.session_state.pop("upload_failure")
+
+# if "upload_success" in st.session_state and st.session_state.upload_success:
+#     st.toast("資料上傳成功！", icon="✅")
+#     st.session_state.upload_success = 0
 
 if "delete_success" in st.session_state and st.session_state.delete_success:
     st.toast("資料刪除成功！", icon="✅")
@@ -51,21 +61,21 @@ def delete_pinecone_documents(index):
 
 
 @st.dialog("刪除文件")
-def delete_documents():
+def delete_documents(my_documents):
     selected_indices = event.selection.rows
-    titles = st.session_state.documents.loc[selected_indices, "title"].tolist()
+    titles = my_documents.loc[selected_indices, "title"].tolist()
     title_str = "\n".join([f"- {title}" for title in titles])
     info_str = "確認刪除以下文件？\n" + title_str
     st.markdown(info_str)
 
     if st.button("確認"):
         index = get_index(st.secrets["INDEX_NAME"])
-        with st.spinner(text="刪除中..."):
+        with st.spinner(text="刪除文件中..."):
             delete_pinecone_documents(index)
 
             # update sheet "vectors"
             vectors = DocumentManager.read("vectors")
-            selected_document_ids = st.session_state.documents.loc[
+            selected_document_ids = my_documents.loc[
                 selected_indices, "document_id"
             ].tolist()
             row_indices = vectors.index[
@@ -80,8 +90,11 @@ def delete_documents():
             ].tolist()
             DocumentManager.delete_rows("documents", row_indices)
 
-            filtered_documents = st.session_state.documents.drop(
-                selected_indices)
+            filtered_documents = st.session_state.documents[
+                ~st.session_state.documents["document_id"].isin(
+                    selected_document_ids
+                )
+            ]
             filtered_documents = filtered_documents.reset_index(drop=True)
             st.session_state.documents = filtered_documents
 
@@ -104,7 +117,7 @@ def delete_documents():
 
 def generate_unique_id(content: str) -> str:
     # Ensure the content is encoded to bytes
-    content_bytes = content.encode("utf-8")
+    content_bytes = content.encode("utf-8", errors="ignore")
     # Create a SHA-256 hash object
     sha256_hash = hashlib.sha256()
     # Update the hash object with the bytes of the content
@@ -142,13 +155,14 @@ def get_index(index_name):
     return index
 
 
-def load_pdf(bytes_data, tag, name):
+def load_pdf(bytes_data, tag, name, desc):
     p = io.BytesIO(bytes_data)
     reader = PyPDF2.PdfReader(p)
     data = []
 
-    for i in range(len(reader.pages)):
+    for i in stqdm(range(len(reader.pages)), desc=desc):
         content = reader.pages[i].extract_text()
+        clean_content = content.encode('utf-8', 'replace').decode('utf-8')
 
         if len(content) < 10:
             continue
@@ -157,7 +171,7 @@ def load_pdf(bytes_data, tag, name):
             "tag": tag,
             "name": name,
             "page": i + 1,
-            "content": content,
+            "content": clean_content,
         })
 
     return data
@@ -169,9 +183,9 @@ def get_embeddings(texts, model="text-embedding-3-small"):
     return embeddings
 
 
-def upsert_documents(index, documents, batch_size=64):
+def upsert_documents(index, documents, desc, batch_size=64):
     id_list = []
-    for i in tqdm(range(0, len(documents), batch_size)):
+    for i in stqdm(range(0, len(documents), batch_size), desc=desc):
         docs = documents[i: i + batch_size]
         contents = [doc["content"] for doc in docs]
         embeddings = get_embeddings(contents)
@@ -189,39 +203,46 @@ def upsert_documents(index, documents, batch_size=64):
 
 
 def upload_document_to_google_sheet(id_list, title, tag):
-    # update local data
     document_id = str(uuid.uuid4())
-    new_row = [{
+    new_document_row = [{
         "document_id": document_id,
         "title": title,
         "tag": tag,
     }]
-    new_df = pd.DataFrame(new_row)
-    new_df = pd.concat([st.session_state.documents, new_df])
-    new_df = new_df.reset_index(drop=True)
-    st.session_state.documents = new_df
 
-    # update sheet "documents"
-    DocumentManager.append_rows("documents", [list(new_row[0].values())])
-
-    # update sheet "vectors"
-    new_vectors = [[document_id, vector_id] for vector_id in id_list]
-    DocumentManager.append_rows("vectors", new_vectors)
-
-    # update local data
-    new_row = [{
+    new_user_document_row = [{
         "id": str(uuid.uuid4()),
         "username": st.session_state["username"],
         "document_id": document_id,
         "access_level": "write",
     }]
-    new_df = pd.DataFrame(new_row)
+
+    new_vectors = [[document_id, vector_id] for vector_id in id_list]
+
+    try:
+        # update sheet "documents"
+        DocumentManager.append_rows(
+            "documents", [list(new_document_row[0].values())])
+
+        # update sheet "userDocuments"
+        DocumentManager.append_rows(
+            "userDocuments", [list(new_user_document_row[0].values())])
+
+        # update sheet "vectors"
+        DocumentManager.append_rows("vectors", new_vectors)
+    except:
+        raise
+
+    # update local data
+    new_df = pd.DataFrame(new_document_row)
+    new_df = pd.concat([st.session_state.documents, new_df])
+    new_df = new_df.reset_index(drop=True)
+    st.session_state.documents = new_df
+
+    new_df = pd.DataFrame(new_user_document_row)
     new_df = pd.concat([st.session_state.user_documents, new_df])
     new_df = new_df.reset_index(drop=True)
     st.session_state.user_documents = new_df
-
-    # update sheet "userDocuments"
-    DocumentManager.append_rows("userDocuments", [list(new_row[0].values())])
 
 
 @st.dialog("上傳文件")
@@ -234,6 +255,7 @@ def upload_document():
         "選取檔案", accept_multiple_files=True, type="pdf")
     tag = st.selectbox("選取文件類別", options)
 
+    # check if the document already exists in the database
     titles = [Path(file.name).stem for file in uploaded_files]
     matching_titles = st.session_state.documents[
         st.session_state.documents["title"].isin(titles)
@@ -246,31 +268,34 @@ def upload_document():
 
     if st.button("提交", disabled=disabled, key="submit_button"):
         progress_text = "上傳文件..."
-        my_bar = st.progress(0, text=progress_text)
-        current_stage = 0
-        total_stage = len(uploaded_files) * 3
         index = get_index(st.secrets["INDEX_NAME"])
+        titles, vector_list = [], []
 
+        st.session_state.upload_failure = []
         for i, uploaded_file in enumerate(uploaded_files):
             title = Path(uploaded_file.name).stem
             bytes_data = uploaded_file.getvalue()
 
-            data = load_pdf(bytes_data, tag, title)
+            try:
+                # Update pinecone index
+                desc = f"讀取第 {i+1}  /  {len(uploaded_files)} 文件"
+                data = load_pdf(bytes_data, tag, title, desc)
+                desc = f"計算第 {i+1}  /  {len(uploaded_files)} 文件特徵向量"
+                id_list = upsert_documents(index, data, desc)
 
-            current_stage += 1
-            my_bar.progress(current_stage / total_stage, text=progress_text)
-            id_list = upsert_documents(index, data)
+                titles.append(title)
+                vector_list.append(id_list)
+            except:
+                st.session_state.upload_failure.append(title)
 
-            # update data on Google sheet
-            current_stage += 1
-            my_bar.progress(current_stage / total_stage, text=progress_text)
-            upload_document_to_google_sheet(id_list, title, tag)
+        # update data on Google sheet
+        for i in stqdm(range(len(titles)), desc="同步至資料庫"):
+            try:
+                upload_document_to_google_sheet(vector_list[i], titles[i], tag)
+            except:
+                st.session_state.upload_failure.append(titles[i])
 
-            current_stage += 1
-            my_bar.progress(current_stage / total_stage, text=progress_text)
-
-        my_bar.empty()
-        st.session_state.upload_success = 1
+        # st.session_state.upload_success = 1
         st.rerun()
 
 
@@ -310,40 +335,45 @@ column_configuration = {
 }
 
 st.header("資料庫")
-my_document_tab, shared_document_tab = st.tabs(["我的文件", "共用文件"])
-my_documents, shared_documents = get_documents_by_permission(
-    st.session_state.documents, st.session_state.user_documents
-)
-
-with my_document_tab:
-    event = st.dataframe(
-        my_documents,
-        column_config=column_configuration,
-        use_container_width=True,
-        hide_index=True,
-        on_select="rerun",
-        selection_mode="multi-row",
+if st.session_state.documents is None or st.session_state.user_documents is None:
+    st.error("無法讀取資料，請稍候並重新整理")
+else:
+    my_document_tab, shared_document_tab = st.tabs(["我的文件", "共用文件"])
+    my_documents, shared_documents = get_documents_by_permission(
+        st.session_state.documents, st.session_state.user_documents
     )
 
-    columns = st.columns([1] * 9)
-    with columns[0]:
-        st.button(label="上傳", on_click=upload_document, key="upload_button")
-
-    with columns[1]:
-        disabled = not bool(event.selection.rows)
-        st.button(
-            "刪除",
-            type="primary",
-            on_click=delete_documents,
-            disabled=disabled,
-            key="delete_button"
+    with my_document_tab:
+        event = st.dataframe(
+            my_documents,
+            column_config=column_configuration,
+            use_container_width=True,
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="multi-row",
         )
 
-with shared_document_tab:
-    st.dataframe(
-        shared_documents,
-        column_config=column_configuration,
-        use_container_width=True,
-        hide_index=True,
-        on_select="ignore"
-    )
+        columns = st.columns([1] * 9)
+        with columns[0]:
+            st.button(label="上傳", on_click=upload_document,
+                      key="upload_button")
+
+        with columns[1]:
+            disabled = not bool(event.selection.rows)
+            st.button(
+                "刪除",
+                type="primary",
+                on_click=delete_documents,
+                args=(my_documents, ),
+                disabled=disabled,
+                key="delete_button"
+            )
+
+    with shared_document_tab:
+        st.dataframe(
+            shared_documents,
+            column_config=column_configuration,
+            use_container_width=True,
+            hide_index=True,
+            on_select="ignore"
+        )
