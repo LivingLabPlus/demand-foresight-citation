@@ -11,3 +11,4 @@ pycryptodome==3.21.0
 google-auth-httplib2 
 google-api-python-client
 stqdm
+streamlit-tags

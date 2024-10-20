@@ -116,6 +116,9 @@ with st.spinner("讀取資料中..."):
         else:
             st.session_state.messages = []
 
+    if "tags" not in st.session_state:
+        st.session_state.tags = DocumentManager.read("tags")
+
 options, captions = get_options_and_captions(st.session_state.messages)
 
 if 'selected_dialog' not in st.session_state:
@@ -133,7 +136,7 @@ with st.sidebar:
         )
         select_tag = st.selectbox(
             label="文件類別",
-            options=st.secrets["TAG_OPTION"],
+            options=st.session_state.tags["tag"].tolist(),
             index=0,
             key="tag_selection"
         )

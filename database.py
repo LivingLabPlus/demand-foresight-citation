@@ -5,6 +5,7 @@ import PyPDF2
 import pandas as pd
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
+from streamlit_tags import st_tags
 from pinecone import Pinecone, ServerlessSpec
 from pathlib import Path
 from openai import OpenAI
@@ -28,6 +29,9 @@ with st.spinner("讀取資料中..."):
             st.session_state.username
         )
 
+    if "tags" not in st.session_state:
+        st.session_state.tags = DocumentManager.read("tags")
+
 if "upload_failure" in st.session_state:
     if len(st.session_state.upload_failure) == 0:
         st.toast("資料上傳成功！", icon="✅")
@@ -37,13 +41,17 @@ if "upload_failure" in st.session_state:
 
     st.session_state.pop("upload_failure")
 
-# if "upload_success" in st.session_state and st.session_state.upload_success:
-#     st.toast("資料上傳成功！", icon="✅")
-#     st.session_state.upload_success = 0
-
 if "delete_success" in st.session_state and st.session_state.delete_success:
     st.toast("資料刪除成功！", icon="✅")
     st.session_state.delete_success = 0
+
+if "add_tag_success" in st.session_state and st.session_state.add_tag_success:
+    st.toast("標籤新增成功！", icon="✅")
+    st.session_state.add_tag_success = 0
+
+if "delete_tag_success" in st.session_state and st.session_state.delete_tag_success:
+    st.toast("標籤刪除成功！", icon="✅")
+    st.session_state.delete_tag_success = 0
 
 
 def delete_pinecone_documents(index):
@@ -247,13 +255,9 @@ def upload_document_to_google_sheet(id_list, title, tag):
 
 @st.dialog("上傳文件")
 def upload_document():
-    options = st.secrets["TAG_OPTION"][:]
-    if "全" in options:
-        options.remove("全")
-
     uploaded_files = st.file_uploader(
         "選取檔案", accept_multiple_files=True, type="pdf")
-    tag = st.selectbox("選取文件類別", options)
+    tag = st.selectbox("選取文件類別", st.session_state.tags["tag"].tolist())
 
     # check if the document already exists in the database
     titles = [Path(file.name).stem for file in uploaded_files]
@@ -295,7 +299,6 @@ def upload_document():
             except:
                 st.session_state.upload_failure.append(titles[i])
 
-        # st.session_state.upload_success = 1
         st.rerun()
 
 
@@ -322,6 +325,31 @@ def get_documents_by_permission(documents, user_documents):
     return my_documents, shared_documents
 
 
+@st.dialog("新增標籤")
+def add_tags():
+    tags = st_tags(label="", text="請輸入標籤", maxtags=-1)
+    if st.button("確認", key="tag_confirm",):
+        with st.spinner("新增中..."):
+            DocumentManager.append_rows("tags", [[tag] for tag in tags])
+            new_tag_row = [{"tag": tag} for tag in tags]
+            new_df = pd.DataFrame(new_tag_row)
+            new_df = pd.concat([st.session_state.tags, new_df])
+            new_df = new_df.reset_index(drop=True)
+            st.session_state.tags = new_df
+
+        st.session_state.add_tag_success = 1
+        st.rerun()
+
+
+def delete_tags():
+    row_indices = tag_event.selection.rows
+    DocumentManager.delete_rows("tags", row_indices)
+    filtered_tags = st.session_state.tags.drop(row_indices)
+    filtered_tags = filtered_tags.reset_index(drop=True)
+    st.session_state.tags = filtered_tags
+    st.session_state.delete_tag_success = 1
+
+
 column_configuration = {
     "document_id": None,
     "title": st.column_config.TextColumn(
@@ -338,7 +366,9 @@ st.header("資料庫")
 if st.session_state.documents is None or st.session_state.user_documents is None:
     st.error("無法讀取資料，請稍候並重新整理")
 else:
-    my_document_tab, shared_document_tab = st.tabs(["我的文件", "共用文件"])
+    my_document_tab, shared_document_tab, edit_tag_tab = st.tabs(
+        ["我的文件", "共用文件", "編輯標籤"]
+    )
     my_documents, shared_documents = get_documents_by_permission(
         st.session_state.documents, st.session_state.user_documents
     )
@@ -377,3 +407,31 @@ else:
             hide_index=True,
             on_select="ignore"
         )
+
+    with edit_tag_tab:
+        if st.session_state.username == "admin":
+            tag_event = st.dataframe(
+                st.session_state.tags,
+                on_select="rerun",
+                selection_mode="multi-row",
+                hide_index=True,
+                column_config={
+                    "tag": st.column_config.TextColumn("標籤", width="medium")
+                },
+            )
+
+            columns = st.columns([1] * 9)
+            with columns[0]:
+                st.button("新增", on_click=add_tags, key="add_tags_button")
+            with columns[1]:
+                disabled = not bool(tag_event.selection.rows)
+                st.button(
+                    "刪除",
+                    type="primary",
+                    on_click=delete_tags,
+                    disabled=disabled,
+                    key="delete_tags_button"
+                )
+
+        else:
+            st.info("只有管理者可以編輯標籤")

@@ -120,6 +120,29 @@ class DocumentManager:
             return error
 
     @staticmethod
+    def write_rows(worksheet_name, dataframe):
+        service = DocumentManager.get_service()
+
+        # Convert the DataFrame to a list of lists (including the header)
+        data = [dataframe.columns.tolist()] + dataframe.values.tolist()
+
+        # Define the range to write to (starting from A1)
+        range_name = f"{worksheet_name}!A1"
+
+        # Create the body for the update request
+        body = {
+            'values': data
+        }
+
+        # Use the Sheets API to update the values
+        result = service.spreadsheets().values().update(
+            spreadsheetId=st.secrets["connection"]["spreadsheet_id"],
+            range=range_name,
+            valueInputOption="RAW",  # Options: "RAW" or "USER_ENTERED"
+            body=body
+        ).execute()
+
+    @staticmethod
     def get_documents_by_user(documents, user_documents, username):
         # return None when cannot retrieve documents from database
         if documents is None or user_documents is None:
