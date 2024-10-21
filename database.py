@@ -327,8 +327,20 @@ def get_documents_by_permission(documents, user_documents):
 
 @st.dialog("新增標籤")
 def add_tags():
+    disabled = False
     tags = st_tags(label="", text="請輸入標籤", maxtags=-1)
-    if st.button("確認", key="tag_confirm",):
+    existing_tags = [
+        tag for tag in tags
+        if tag in st.session_state.tags["tag"].tolist()
+    ]
+
+    if len(tags) == 0 or len(existing_tags) != 0:
+        disabled = True
+
+    if len(existing_tags) != 0:
+        st.error(f"標籤「{existing_tags[0]}」已經在資料庫中！")
+
+    if st.button("確認", key="tag_confirm", disabled=disabled):
         with st.spinner("新增中..."):
             DocumentManager.append_rows("tags", [[tag] for tag in tags])
             new_tag_row = [{"tag": tag} for tag in tags]
