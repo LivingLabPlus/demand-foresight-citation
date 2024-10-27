@@ -16,17 +16,27 @@ datetime_format = "%Y-%m-%d %H:%M:%S"
 disable_chat_input = False
 
 
+def title_exists(title):
+    for dialog in st.session_state.messages:
+        if dialog["title"] == title:
+            return True
+    return False
+
+
 def get_title(message):
     prompt = f"請為接下來的訊息產生一個10字以內的標題: {message}"
 
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": prompt}
-        ]
-    )
-    return response.choices[0].message.content
+    while True:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        title = response.choices[0].message.content
+        if not title_exists(title):
+            return title
 
 
 @st.cache_data
