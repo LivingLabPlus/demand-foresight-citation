@@ -101,6 +101,7 @@ with st.spinner("讀取資料中..."):
         if documents is None:
             st.session_state.documents = pd.DataFrame()
         else:
+            # keep only documents visible to user in session state
             st.session_state.documents = DocumentManager.get_documents_by_user(
                 documents,
                 st.session_state.user_documents,
@@ -125,7 +126,7 @@ if 'selected_dialog' not in st.session_state:
     st.session_state.selected_dialog = None
 
 with st.sidebar:
-    history_tab, option_tab = st.tabs(["對話紀錄", "模型選項"])
+    history_tab, option_tab = st.tabs(["對話紀錄", "對話選項"])
 
     with option_tab:
         select_model = st.selectbox(
@@ -139,6 +140,17 @@ with st.sidebar:
             options=st.session_state.tags["tag"].tolist(),
             index=0,
             key="tag_selection"
+        )
+
+        # allow users to specify which documents to use in the conversation
+        document_options = st.session_state.documents[
+            st.session_state.documents["tag"] == select_tag
+        ]["title"].tolist()
+        select_documents = st.multiselect(
+            label="文件名稱（未選取則搜尋全部文件）",
+            options=document_options,
+            placeholder="選取對話文件",
+            key="document_selection"
         )
         temp = st.slider("Temperature", min_value=0.00,
                          max_value=1.0, step=0.01, key="temperature")
@@ -232,11 +244,15 @@ def add_chat_history():
 # Accept user input
 if prompt := st.chat_input("輸入你的問題", key="user_query",
                            on_submit=add_chat_history, disabled=disable_chat_input):
-    document_names = st.session_state.documents["title"].tolist()
+    # if no documents are selected, pass all documents with tag "select_tag" to rag
+    if len(select_documents) == 0:
+        document_names = document_options
+    else:
+        document_names = select_documents
+
     _, stream = rag(
         prompt,
         model_id=select_model,
-        tag=select_tag,
         document_names=document_names,
         session_id=st.session_state.selected_dialog,
         temperature=temp

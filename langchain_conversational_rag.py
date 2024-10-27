@@ -58,22 +58,19 @@ def get_index(index_name):
     return index
 
 
-def get_retriever(index_name, tag, document_names):
-    model_name = 'text-embedding-3-small'  
-    embeddings = OpenAIEmbeddings(model=model_name)    
+def get_retriever(index_name, document_names):
+    model_name = 'text-embedding-3-small'
+    embeddings = OpenAIEmbeddings(model=model_name)
 
     index = get_index(index_name)
-    text_field = "content"  
-    vectorstore = PineconeVectorStore(  
-        index, embeddings, text_field  
+    text_field = "content"
+    vectorstore = PineconeVectorStore(
+        index, embeddings, text_field
     )
 
     search_kwargs = {
         "k": 20,
         "filter": {
-            'tag': {
-                '$eq': tag
-            },
             "name": {
                 "$in": document_names
             }
@@ -91,34 +88,34 @@ def format_docs(docs):
         name = doc.metadata['name']
         page = doc.metadata['page']
         content = doc.page_content
-        result.append(f'<item name="{name}" page="{page}">\n<page_content>\n{content}\n</page_content>\n</item>')
+        result.append(
+            f'<item name="{name}" page="{page}">\n<page_content>\n{content}\n</page_content>\n</item>')
 
     return '\n'.join(result)
 
 
 def get_rag_chain(
     model_id,
-    tag, 
     document_names,
-    temperature=0, 
+    temperature=0,
     index_name='demand-foresight'
 ):
-    retriever = get_retriever(index_name, tag, document_names)
+    retriever = get_retriever(index_name, document_names)
     if 'gpt' in model_id:
         llm = ChatOpenAI(
-            model=model_id, 
+            model=model_id,
             temperature=temperature,
             max_tokens=16384,
             api_key=st.secrets['OPENAI_API_KEY']
         )
     elif 'claude' in model_id:
         llm = ChatAnthropic(
-            model=model_id, 
+            model=model_id,
             temperature=temperature,
             max_tokens=8192,
             api_key=st.secrets['ANTHROPIC_API_KEY']
         )
-    
+
     contextualize_q_prompt = ChatPromptTemplate.from_messages(
         [
             ("system", contextualize_q_system_prompt),
@@ -126,7 +123,7 @@ def get_rag_chain(
             ("human", "{input}"),
         ]
     )
-    
+
     history_aware_retriever = create_history_aware_retriever(
         llm, retriever, contextualize_q_prompt
     )
@@ -140,7 +137,8 @@ def get_rag_chain(
     )
 
     chain = (
-        RunnablePassthrough.assign(context=(lambda x: format_docs(x["context"])))
+        RunnablePassthrough.assign(
+            context=(lambda x: format_docs(x["context"])))
         | prompt
         | llm
         | StrOutputParser()
@@ -157,16 +155,14 @@ def get_session_history(session_id):
 
 
 def rag(
-    question, 
+    question,
     model_id,
-    tag,
     document_names,
-    session_id=None, 
+    session_id=None,
     temperature=0
 ):
     rag_chain = get_rag_chain(
         model_id,
-        tag,
         document_names,
         temperature=temperature,
         index_name=st.secrets['INDEX_NAME']
@@ -178,7 +174,7 @@ def rag(
         history_messages_key="chat_history",
         output_messages_key="answer",
     )
-    
+
     if session_id is None:
         session_id = str(uuid.uuid4())
 
@@ -196,12 +192,12 @@ if __name__ == '__main__':
     question = '哪一個機關負責老人狀況調查'
     temperature = 0
     session_id, stream = rag(
-        question, 
+        question,
         model_id,
-        tag=tag, 
+        tag=tag,
         temperature=temperature
     )
-    
+
     for chunk in stream:
         if answer_chunk := chunk.get("answer"):
             print(answer_chunk, end='', flush=True)
@@ -209,10 +205,10 @@ if __name__ == '__main__':
 
     question = '多久要進行一次？'
     _, stream = rag(
-        question, 
+        question,
         model_id,
         tag=tag,
-        session_id=session_id, 
+        session_id=session_id,
         temperature=temperature
     )
     for chunk in stream:

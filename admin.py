@@ -14,7 +14,7 @@ with open('users.yaml') as file:
 users = list(config['credentials']['usernames'].keys())
 users.remove('admin')
 
-selected_username = st.selectbox('**使用者列表**', users)
+selected_username = st.selectbox('**選擇使用者**', users)
 
 with st.spinner("讀取資料中..."):
     if "user_documents" not in st.session_state:
