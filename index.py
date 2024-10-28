@@ -22,6 +22,13 @@ database_page = st.Page("database.py", title="資料庫", icon=":material/databa
 account_page = st.Page("account.py", title="帳戶", icon=":material/person:")
 admin_page = st.Page("admin.py", title="文件管理", icon=":material/settings:")
 
+# Initialize pages based on secrets
+pages = [chat_page]
+if st.secrets.modules.document_management:
+    pages.append(database_page)
+if st.secrets.modules.authentication:
+    pages.append(account_page)
+
 
 def run_navigation(pages):
     # Handle authentication if enabled
@@ -51,14 +58,8 @@ if st.secrets.modules.authentication:
     except LoginError as e:
         st.error(e)
 
-    # Initialize pages based on secrets and user
-    pages = [chat_page]
-    if st.secrets.modules.document_management:
-        pages.append(database_page)
     if st.session_state.username == 'admin':
-        pages.append(admin_page)
-    if st.secrets.modules.authentication:
-        pages.append(account_page)
+        pages.insert(2, admin_page)
 
     if st.session_state.authentication_status:
         st.session_state.authenticator = authenticator
