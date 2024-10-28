@@ -6,8 +6,9 @@ from yaml.loader import SafeLoader
 
 st.set_page_config(page_title="Demand Foresight")
 
-with open('users.yaml') as file:
-    config = yaml.load(file, Loader=SafeLoader)
+if "config" not in st.session_state:
+    with open("users.yaml") as file:
+        st.session_state.config = yaml.load(file, Loader=SafeLoader)
 
 
 def empty_page():
@@ -39,31 +40,34 @@ def cleanup():
 
 if st.secrets.modules.authentication:
     authenticator = stauth.Authenticate(
-        config['credentials'],
-        config['cookie']['name'],
-        config['cookie']['key'],
-        config['cookie']['expiry_days']
+        st.session_state.config['credentials'],
+        st.session_state.config['cookie']['name'],
+        st.session_state.config['cookie']['key'],
+        st.session_state.config['cookie']['expiry_days'],
     )
-    name, authentication_status, username = authenticator.login()
+
+    try:
+        authenticator.login()
+    except LoginError as e:
+        st.error(e)
 
     # Initialize pages based on secrets and user
     pages = [chat_page]
     if st.secrets.modules.document_management:
         pages.append(database_page)
-    if username == 'admin':
+    if st.session_state.username == 'admin':
         pages.append(admin_page)
     if st.secrets.modules.authentication:
         pages.append(account_page)
 
-    if authentication_status:
-        st.session_state['username'] = username
-        st.session_state['authenticator'] = authenticator
+    if st.session_state.authentication_status:
+        st.session_state.authenticator = authenticator
         run_navigation(pages)
     else:
         run_navigation([st.Page(empty_page)])
         cleanup()
 
-        if authentication_status is False:
+        if st.session_state.authentication_status is False:
             st.error('使用者名稱/密碼不正確')
 else:
     st.session_state['username'] = "default_user"
