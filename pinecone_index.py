@@ -94,12 +94,6 @@ def upsert_documents(index, documents, desc, batch_size=64):
     return id_list
 
 
-@st.cache_data
-def get_tag_options(documents, index_name):
-    tags = documents[documents["index_name"] == index_name]["tag"]
-    return tags.unique().tolist()
-
-
 @st.dialog("上傳文件")
 def upload_document():
     uploaded_files = st.file_uploader(
@@ -109,10 +103,9 @@ def upload_document():
         st.secrets["PINECONE_INDICES"],
         key="in_dialog_index_name_selectbox"
     )
-    options = get_tag_options(st.session_state.documents, index_name)
     tag = st.selectbox(
         "文件類別",
-        options,
+        st.secrets["index"][index_name]["tag_options"],
         key="in_dialog_tag_selectbox"
     )
 
@@ -186,8 +179,11 @@ selected_index = st.selectbox(
     st.secrets["PINECONE_INDICES"],
     key="homepage_index_name_selectbox"
 )
-options = get_tag_options(st.session_state.documents, selected_index)
-selected_tag = st.selectbox("文件類別", options, key="homepage_tag_selectbox")
+selected_tag = st.selectbox(
+    "文件類別",
+    st.secrets["index"][selected_index]["tag_options"],
+    key="homepage_tag_selectbox"
+)
 
 my_documents = get_documents_by_index_name(
     st.session_state.documents, selected_index, selected_tag
