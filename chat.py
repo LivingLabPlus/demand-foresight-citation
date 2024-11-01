@@ -152,16 +152,20 @@ with st.sidebar:
             key="tag_selection"
         )
 
-        # allow users to specify which documents to use in the conversation
+        select_documents = None
         document_options = st.session_state.documents[
             st.session_state.documents["tag"] == select_tag
         ]["title"].tolist()
-        select_documents = st.multiselect(
-            label="文件名稱（未選取則搜尋全部文件）",
-            options=document_options,
-            placeholder="選取對話文件",
-            key="document_selection"
-        )
+
+        # allow users to specify which documents to use in the conversation
+        if st.secrets["modules"]["doc_chat"]:
+            select_documents = st.multiselect(
+                label="文件名稱（未選取則搜尋全部文件）",
+                options=document_options,
+                placeholder="選取對話文件",
+                key="document_selection"
+            )
+
         temp = st.slider("Temperature", min_value=0.00,
                          max_value=1.0, step=0.01, key="temperature")
 
@@ -255,7 +259,7 @@ def add_chat_history():
 if prompt := st.chat_input("輸入你的問題", key="user_query",
                            on_submit=add_chat_history, disabled=disable_chat_input):
     # if no documents are selected, pass all documents with tag "select_tag" to rag
-    if len(select_documents) == 0:
+    if select_documents is None or len(select_documents) == 0:
         document_names = document_options
     else:
         document_names = select_documents
