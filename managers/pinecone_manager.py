@@ -84,3 +84,19 @@ class PineconeManager:
             id_list += ids_batch
 
         return id_list
+
+    @staticmethod
+    def fetch_document_content(vector_list):
+        content = ""
+        try:
+            vectors = st.session_state.index.fetch(vector_list)
+            metadata = [
+                vector["metadata"]
+                for _id, vector in vectors["vectors"].items()
+            ]
+            metadata = sorted(metadata, key=lambda x: x["page"])
+            content = "".join([doc["content"] for doc in metadata])
+        except Exception as e:
+            print("Cannot fetch document content:", str(e))
+
+        return content

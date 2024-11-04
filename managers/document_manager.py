@@ -9,6 +9,7 @@ from stqdm import stqdm
 from .sheet_manager import SheetManager
 from .pinecone_manager import PineconeManager
 from .session_manager import SessionManager
+from .llm_manager import LLMManger
 
 
 class DocumentManager:
@@ -35,6 +36,32 @@ class DocumentManager:
         return data
 
     @staticmethod
+    def _summarize(data, desc):
+        llm_manager = LLMManger()
+        content = "".join([page["content"] for page in data])
+        for _ in stqdm(range(1), desc=desc):
+            summary = llm_manager.summarize(content)
+        return summary
+
+    @staticmethod
+    def get_document_titles_by_tag(tag):
+        return st.session_state.documents[
+            st.session_state.documents["tag"] == tag
+        ]["title"].tolist()
+
+    @staticmethod
+    def get_document_summary_by_title(title):
+        summary = st.session_state.documents.loc[
+            st.session_state.documents["title"] == title, "summary"
+        ].values
+
+        # Check if a summary was found
+        if summary.size > 0:
+            return summary[0]
+        else:
+            return "尚未產生文件摘要"
+
+    @staticmethod
     @st.cache_data
     def get_documents_by_permission(documents, user_documents):
         df = user_documents[
@@ -58,12 +85,13 @@ class DocumentManager:
         return my_documents, shared_documents
 
     @staticmethod
-    def create_document_row(document_id, title, tag):
+    def create_document_row(document_id, title, summary, tag):
         """Create a dictionary for a new document row."""
         return [{
             "document_id": document_id,
             "title": title,
             "tag": tag,
+            "summary": summary,
         }]
 
     @staticmethod
@@ -134,13 +162,13 @@ class DocumentManager:
         st.rerun()
 
     @staticmethod
-    def sync_to_google_sheets(titles, vector_list, tag):
+    def sync_to_google_sheets(titles, vector_list, summaries, tag):
         """Sync the processed documents and vectors to Google Sheets."""
         for i in stqdm(range(len(titles)), desc="同步至資料庫"):
             try:
                 document_id = str(uuid.uuid4())
                 new_document_row = DocumentManager.create_document_row(
-                    document_id, titles[i], tag)
+                    document_id, titles[i], summaries[i], tag)
                 new_user_document_row = DocumentManager.create_user_document_row(
                     document_id)
                 new_vectors = DocumentManager.create_vector_rows(
@@ -164,25 +192,31 @@ class DocumentManager:
     def process_uploaded_files(uploaded_files, tag):
         """Process each uploaded file by loading, embedding, and uploading to Google Sheets."""
         st.session_state.upload_failure = []
-        titles, vector_list = [], []
+        titles, vector_list, summaries = [], [], []
 
         for i, uploaded_file in enumerate(uploaded_files):
             title = Path(uploaded_file.name).stem
             try:
                 bytes_data = uploaded_file.getvalue()
                 data = DocumentManager.load_pdf(
-                    bytes_data, tag, title, desc=f"讀取第 {i+1} / {len(uploaded_files)} 文件")
+                    bytes_data, tag, title, desc=f"讀取第 {i+1} / {len(uploaded_files)} 份文件"
+                )
                 id_list = PineconeManager.upsert_documents(
-                    data, desc=f"計算第 {i+1} / {len(uploaded_files)} 文件特徵向量")
+                    data, desc=f"計算第 {i+1} / {len(uploaded_files)} 份文件特徵向量"
+                )
+                summary = DocumentManager._summarize(
+                    data, desc=f"產生第 {i+1} / {len(uploaded_files)} 份文件摘要"
+                )
 
                 titles.append(title)
                 vector_list.append(id_list)
+                summaries.append(summary)
             except Exception as e:
                 print(f"Failed to process {title}: {e}")
                 st.session_state.upload_failure.append(title)
 
         DocumentManager.sync_to_google_sheets(
-            titles, vector_list, tag)
+            titles, vector_list, summaries, tag)
 
     @staticmethod
     @st.dialog("上傳文件")

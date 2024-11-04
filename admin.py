@@ -4,7 +4,7 @@ import uuid
 import yaml
 from yaml.loader import SafeLoader
 
-from document_manager import DocumentManager
+from managers import DocumentManager
 
 dm = DocumentManager()
 

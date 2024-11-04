@@ -25,8 +25,8 @@ def initialize_page():
 
 def display_documents_interface():
     """Display main interface for managing documents and tags."""
-    my_document_tab, shared_document_tab, edit_tag_tab = st.tabs(
-        ["我的文件", "共用文件", "編輯標籤"])
+    my_document_tab, shared_document_tab, document_summary_tab, edit_tag_tab = st.tabs(
+        ["我的文件", "共用文件", "文件摘要", "編輯標籤"])
     my_documents, shared_documents = DocumentManager.get_documents_by_permission(
         st.session_state.documents, st.session_state.user_documents)
 
@@ -35,6 +35,9 @@ def display_documents_interface():
 
     with shared_document_tab:
         display_shared_documents(shared_documents)
+
+    with document_summary_tab:
+        display_document_summaries()
 
     with edit_tag_tab:
         display_tag_management()
@@ -79,6 +82,18 @@ def display_shared_documents(shared_documents):
         hide_index=True,
         on_select="ignore"
     )
+
+
+def display_document_summaries():
+    """Display '文件摘要' tab."""
+    selected_tag = st.selectbox(
+        "選取文件類別", st.session_state.tags["tag"].tolist())
+    titles = DocumentManager.get_document_titles_by_tag(selected_tag)
+    selected_title = st.selectbox("選取文件", titles)
+
+    if selected_title is not None:
+        summary = DocumentManager.get_document_summary_by_title(selected_title)
+        st.markdown(summary)
 
 
 def display_tag_management():
@@ -129,13 +144,14 @@ def define_column_config():
             help="文件類別",
             width="small"
         ),
+        "summary": None,
     }
 
 
 # Main execution
+initialize_page()
 st.header("資料庫")
 if SessionManager.is_data_loaded():
-    initialize_page()
     display_documents_interface()
 else:
     st.error("無法讀取資料，請稍候並重新整理")

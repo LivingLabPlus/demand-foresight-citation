@@ -75,7 +75,7 @@ class SessionManager:
     def load_initial_data():
         # Load initial data into session state
         if "user_documents" not in st.session_state:
-            st.session_state.user_documents = SessionManager.read(
+            st.session_state.user_documents = SheetManager.read(
                 "userDocuments")
 
         if "documents" not in st.session_state:
