@@ -1,10 +1,9 @@
-langchain==0.3.7
-langgraph
-langchain-anthropic
-langchain-community
-langchain-core
-langchain-openai
-langchain-pinecone
+langchain==0.2.5
+langchain-anthropic==0.1.15
+langchain-community==0.2.5
+langchain-core==0.2.9
+langchain-openai==0.1.8
+langchain-pinecone==0.1.1
 st-gsheets-connection==0.1.0
 PyPDF2==3.0.1
 streamlit-authenticator==0.4.1
@@ -13,3 +12,4 @@ google-auth-httplib2
 google-api-python-client
 stqdm
 streamlit-tags
+google-generativeai
