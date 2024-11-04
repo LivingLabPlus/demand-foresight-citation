@@ -7,7 +7,8 @@ from googleapiclient.errors import HttpError
 from langchain_conversational_rag import rag
 from openai import OpenAI
 from datetime import datetime
-from document_manager import DocumentManager
+
+from managers import DocumentManager, SheetManager, SessionManager
 
 client = OpenAI(api_key=st.secrets['OPENAI_API_KEY'])
 # reload messages from google sheet
@@ -40,50 +41,6 @@ def get_title(message):
 
 
 @st.cache_data
-def transform_message_df(df, username):
-    df = df[df['username'] == username]
-    df = df.loc[:, df.columns != 'username']  # Drop without inplace=True
-
-    # Ensure timestamp column is in datetime format
-    df['timestamp'] = pd.to_datetime(df['timestamp'], format=datetime_format)
-
-    # Group by chat_id and title, then sort by timestamp
-    grouped = df.groupby(['chat_id', 'title'])
-
-    # Prepare the final output
-    result = []
-
-    for (chat_id, title), group in grouped:
-        messages = group[['role', 'content', 'timestamp']].sort_values(
-            'timestamp').to_dict(orient='records')
-        chat_entry = {
-            'chat_id': chat_id,
-            'title': title,
-            'messages': messages
-        }
-        result.append(chat_entry)
-
-    # result format:
-    # [
-    #     {
-    #         "chat_id": "string",
-    #         "title": "string",
-    #         "messages": [
-    #             {
-    #                 "role": "string",
-    #                 "content": "string",
-    #                 "timestamp": "datetime"
-    #             }
-    #         ]
-    #     }
-    # ]
-
-    sorted_result = sorted(
-        result, key=lambda x: x['messages'][-1]['timestamp'], reverse=True)
-    return sorted_result
-
-
-@st.cache_data
 def get_options_and_captions(messages):
     options, captions = [], []
     sorted_messages = sorted(
@@ -103,32 +60,7 @@ if (("user_documents" in st.session_state and st.session_state.user_documents is
     disable_chat_input = True
 
 with st.spinner("讀取資料中..."):
-    if "user_documents" not in st.session_state:
-        st.session_state.user_documents = DocumentManager.read("userDocuments")
-
-    if "documents" not in st.session_state:
-        documents = DocumentManager.read("documents")
-        if documents is None:
-            st.session_state.documents = pd.DataFrame()
-        else:
-            # keep only documents visible to user in session state
-            st.session_state.documents = DocumentManager.get_documents_by_user(
-                documents,
-                st.session_state.user_documents,
-                st.session_state.username
-            )
-
-    # Initialize chat history
-    if "messages" not in st.session_state:
-        messages = DocumentManager.read("messages")
-        if messages is not None:
-            st.session_state.messages = transform_message_df(
-                messages, st.session_state.username)
-        else:
-            st.session_state.messages = []
-
-    if "tags" not in st.session_state:
-        st.session_state.tags = DocumentManager.read("tags")
+    SessionManager.load_initial_data()
 
 options, captions = get_options_and_captions(st.session_state.messages)
 
@@ -215,7 +147,7 @@ def add_message_to_database(title, chat_id, content, role):
         role,
     ]]
 
-    DocumentManager.append_rows('messages', new_rows)
+    SheetManager.append_rows('messages', new_rows)
 
 
 def update_chat_history(response, role):

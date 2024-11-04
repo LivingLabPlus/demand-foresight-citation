@@ -1,15 +1,12 @@
-import streamlit as st
 import pandas as pd
-import time
-import uuid
+import streamlit as st
 from streamlit_gsheets import GSheetsConnection
-
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 
-class DocumentManager:
+class SheetManager:
     @staticmethod
     def get_service():
         SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
@@ -27,7 +24,7 @@ class DocumentManager:
     @staticmethod
     def read(worksheet_name):
         try:
-            service = DocumentManager.get_service()
+            service = SheetManager.get_service()
 
             # Define the range to fetch data from
             range_name = f"{worksheet_name}"
@@ -54,7 +51,7 @@ class DocumentManager:
     def append_rows(worksheet_name, rows_data):
         # Define the range to append data to
         range_name = f"{worksheet_name}"
-        service = DocumentManager.get_service()
+        service = SheetManager.get_service()
 
         # Append the row to the Google Sheet
         request = service.spreadsheets().values().append(
@@ -71,7 +68,7 @@ class DocumentManager:
     @staticmethod
     def delete_rows(worksheet_name, row_indices):
         try:
-            service = DocumentManager.get_service()
+            service = SheetManager.get_service()
 
             # Retrieve the sheet ID based on the worksheet name
             spreadsheet = service.spreadsheets().get(
@@ -121,7 +118,7 @@ class DocumentManager:
 
     @staticmethod
     def write_rows(worksheet_name, dataframe):
-        service = DocumentManager.get_service()
+        service = SheetManager.get_service()
 
         # Convert the DataFrame to a list of lists (including the header)
         data = [dataframe.columns.tolist()] + dataframe.values.tolist()
@@ -143,16 +140,32 @@ class DocumentManager:
         ).execute()
 
     @staticmethod
-    def get_documents_by_user(documents, user_documents, username):
-        # return None when cannot retrieve documents from database
-        if documents is None or user_documents is None:
-            return None
+    def delete_documents(document_ids):
+        """Update Google Sheets by removing deleted document entries."""
+        vectors = SheetManager.read("vectors")
+        vector_row_indices = vectors.index[vectors["document_id"].isin(
+            document_ids)].tolist()
+        SheetManager.delete_rows("vectors", vector_row_indices)
 
-        document_ids = user_documents[
-            user_documents["username"] == username
-        ]["document_id"].tolist()
+        documents = SheetManager.read("documents")
+        document_row_indices = documents.index[documents["document_id"].isin(
+            document_ids)].tolist()
+        SheetManager.delete_rows("documents", document_row_indices)
 
-        documents_for_user = documents[
-            documents["document_id"].isin(document_ids)
-        ]
-        return documents_for_user.reset_index(drop=True)
+        user_documents = SheetManager.read("userDocuments")
+        user_row_indices = user_documents.index[user_documents["document_id"].isin(
+            document_ids)].tolist()
+        SheetManager.delete_rows("userDocuments", user_row_indices)
+
+    @staticmethod
+    def upload_document(
+        new_document_row,
+        new_user_document_row,
+        new_vectors
+    ):
+        """Append new rows to the appropriate Google Sheets."""
+        SheetManager.append_rows(
+            "documents", [list(new_document_row[0].values())])
+        SheetManager.append_rows(
+            "userDocuments", [list(new_user_document_row[0].values())])
+        SheetManager.append_rows("vectors", new_vectors)
