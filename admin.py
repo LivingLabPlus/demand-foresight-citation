@@ -4,9 +4,7 @@ import uuid
 import yaml
 from yaml.loader import SafeLoader
 
-from managers import DocumentManager
-
-dm = DocumentManager()
+from managers import SheetManager, SessionManager
 
 with open('users.yaml') as file:
     config = yaml.load(file, Loader=SafeLoader)
@@ -17,17 +15,7 @@ users.remove('admin')
 selected_username = st.selectbox('**選擇使用者**', users)
 
 with st.spinner("讀取資料中..."):
-    if "user_documents" not in st.session_state:
-        st.session_state.user_documents = dm.read(
-            worksheet_name="userDocuments")
-
-    if "documents" not in st.session_state:
-        documents = DocumentManager.read("documents")
-        st.session_state.documents = DocumentManager.get_documents_by_user(
-            documents,
-            st.session_state.user_documents,
-            st.session_state.username
-        )
+    SessionManager.load_initial_data()
 
 if "update_permission_success" in st.session_state and st.session_state.update_permission_success:
     st.toast("變更成功！", icon="✅")
@@ -88,7 +76,7 @@ def hide_document(hided_documents):
 
     # Delete the matching rows from Google Sheets and update session state
     if not matching_rows.empty:
-        dm.delete_rows('userDocuments', matching_rows.index.tolist())
+        SheetManager.delete_rows('userDocuments', matching_rows.index.tolist())
         st.session_state.user_documents = df.drop(
             matching_rows.index
         ).reset_index(drop=True)
@@ -109,7 +97,7 @@ def show_documents(added_documents):
             'access_level': 'read'
         })
 
-    dm.append_rows('userDocuments', rows_to_google_sheet)
+    SheetManager.append_rows('userDocuments', rows_to_google_sheet)
     new_df = pd.DataFrame(rows_in_memory)
     new_df = pd.concat([st.session_state.user_documents, new_df])
     new_df = new_df.reset_index(drop=True)
