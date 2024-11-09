@@ -13,43 +13,10 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_anthropic import ChatAnthropic
 from langchain_pinecone import PineconeVectorStore
+from langchain import hub
 from pinecone import Pinecone, ServerlessSpec
 import streamlit as st
 import uuid
-
-
-system_prompt = '''You are a helpful assistant that is an expert at answering questions with citations.
-
-Here are the documents:
-<documents>
-{context}
-</documents>
-
-When a user asks a question, perform the following tasks:
-1. Find the quotes from the documents that are the most relevant to answering the question. You may need to use many quotes to answer a single question.
-2. Please **avoid long quotes** and extract sections relevant to the question only.
-3. Assign numbers to these quotes in the order they were found. Each segment of the documentation should only be assigned a number once.
-4. Based on the document and quotes, answer the question. If no relevant documents are found, answer "資料庫中找不到相關資料".
-5. When answering the question, provide citations references in square brackets containing the number generated in step 2 (the number the citation was found)
-6. Answer in "traditional Chinese", and structure the output in the following markdown format (without triple backticks):
-```
-Markdown格式的回答[1]
-
-## 資料來源
-
-### 來源一
-- 名稱: "string"
-- 頁數: "string"
-- 相關段落: "string" // relevant passage in a document
-...
-```'''
-contextualize_q_system_prompt = (
-    "Given a chat history and the latest user question "
-    "which might reference context in the chat history, "
-    "formulate a standalone question which can be understood "
-    "without the chat history. Do NOT answer the question, "
-    "just reformulate it if needed and otherwise return it as is."
-)
 
 
 def get_index(index_name):
@@ -69,7 +36,7 @@ def get_retriever(index_name, document_names):
     )
 
     search_kwargs = {
-        "k": 20,
+        "k": st.secrets.rag.top_k,
         "filter": {
             "name": {
                 "$in": document_names
@@ -116,24 +83,18 @@ def get_rag_chain(
             api_key=st.secrets['ANTHROPIC_API_KEY']
         )
 
-    contextualize_q_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", contextualize_q_system_prompt),
-            MessagesPlaceholder("chat_history"),
-            ("human", "{input}"),
-        ]
+    contextualize_q_prompt = hub.pull(
+        st.secrets.prompts.rag_contextualize_q_system_prompt,
+        api_key=st.secrets.LANGCHAIN_API_KEY
     )
 
     history_aware_retriever = create_history_aware_retriever(
         llm, retriever, contextualize_q_prompt
     )
 
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", system_prompt),
-            MessagesPlaceholder("chat_history"),
-            ("human", "{input}"),
-        ]
+    prompt = hub.pull(
+        st.secrets.prompts.rag_system_prompt,
+        api_key=st.secrets.LANGCHAIN_API_KEY
     )
 
     chain = (
