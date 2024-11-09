@@ -208,10 +208,6 @@ if prompt := st.chat_input("輸入你的問題", key="user_query",
     with st.chat_message("assistant"):
         def generate_response():
             for chunk in stream:
-                if context := chunk.get('context'):
-                    for c in context:
-                        print(c.metadata)
-
                 if answer_chunk := chunk.get("answer"):
                     yield (answer_chunk)
 

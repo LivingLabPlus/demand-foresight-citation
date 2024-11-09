@@ -5,7 +5,7 @@ from streamlit_authenticator.utilities import LoginError
 import yaml
 from yaml.loader import SafeLoader
 
-st.set_page_config(page_title="Demand Foresight")
+st.set_page_config(page_title=st.secrets.PAGE_TITLE)
 
 if "config" not in st.session_state:
     with open("users.yaml") as file:
