@@ -3,6 +3,9 @@ import io
 import PyPDF2
 import uuid
 import pandas as pd
+import requests
+import time
+import concurrent.futures
 from pathlib import Path
 from stqdm import stqdm
 
@@ -35,13 +38,21 @@ class DocumentManager:
 
         return data
 
-    @staticmethod
-    def _summarize(data, desc):
-        llm_manager = LLMManger()
-        content = "".join([page["content"] for page in data])
-        for _ in stqdm(range(1), desc=desc):
-            summary = llm_manager.summarize(content)
-        return summary
+    # @staticmethod
+    # def _summarize(data, desc):
+    #     llm_manager = LLMManger()
+    #     content = "".join([page["content"] for page in data])
+    #     for _ in stqdm(range(1), desc=desc):
+    #         summary = llm_manager.summarize(content)
+    #     return summary
+
+    # @staticmethod
+    # def _summarize_in_thread(data, document_id):
+    #     llm_manager = LLMManger()
+    #     content = "".join([page["content"] for page in data])
+    #     summary = llm_manager.summarize(content)
+    #     SheetManager.update_summary("documents", document_id, summary)
+    #     return summary
 
     @staticmethod
     def get_document_titles_by_tag(tag):
@@ -162,17 +173,21 @@ class DocumentManager:
         st.rerun()
 
     @staticmethod
-    def sync_to_google_sheets(titles, vector_list, summaries, tag):
+    def _sync_to_google_sheets(documents):
         """Sync the processed documents and vectors to Google Sheets."""
-        for i in stqdm(range(len(titles)), desc="同步至資料庫"):
+        for i in stqdm(range(len(documents)), desc="同步至資料庫"):
             try:
-                document_id = str(uuid.uuid4())
+                document_id = documents[i]["document_id"]
                 new_document_row = DocumentManager.create_document_row(
-                    document_id, titles[i], summaries[i], tag)
+                    document_id,
+                    documents[i]["title"],
+                    "摘要產生中...",
+                    documents[i]["tag"]
+                )
                 new_user_document_row = DocumentManager.create_user_document_row(
                     document_id)
                 new_vectors = DocumentManager.create_vector_rows(
-                    document_id, vector_list[i])
+                    document_id, documents[i]["vectors"])
 
                 SheetManager.upload_document(
                     new_document_row,
@@ -184,17 +199,40 @@ class DocumentManager:
                     new_document_row,
                     new_user_document_row
                 )
+
             except Exception as e:
                 print(f"Failed to upload {titles[i]} to Google Sheets: {e}")
                 st.session_state.upload_failure.append(titles[i])
+
+    def _summarize(documents):
+        """
+        Calls the FastAPI /summarize endpoint.
+        """
+        api_url = f"{st.secrets.BACKEND_URL}/summarize"
+        try:
+            for document in documents:
+                # Define the payload with document data
+                payload = {
+                    "content": document["content"],
+                    "document_id": document["document_id"]
+                }
+
+                # Send the POST request to the FastAPI endpoint
+                requests.post(api_url, json=payload)
+
+        except requests.exceptions.HTTPError as http_err:
+            return {"error": f"HTTP error occurred: {http_err}"}
+        except Exception as err:
+            return {"error": f"Other error occurred: {err}"}
 
     @staticmethod
     def process_uploaded_files(uploaded_files, tag):
         """Process each uploaded file by loading, embedding, and uploading to Google Sheets."""
         st.session_state.upload_failure = []
-        titles, vector_list, summaries = [], [], []
+        documents = []
 
         for i, uploaded_file in enumerate(uploaded_files):
+            document_id = str(uuid.uuid4())
             title = Path(uploaded_file.name).stem
             try:
                 bytes_data = uploaded_file.getvalue()
@@ -204,19 +242,22 @@ class DocumentManager:
                 id_list = PineconeManager.upsert_documents(
                     data, desc=f"計算第 {i+1} / {len(uploaded_files)} 份文件特徵向量"
                 )
-                summary = DocumentManager._summarize(
-                    data, desc=f"產生第 {i+1} / {len(uploaded_files)} 份文件摘要"
-                )
 
-                titles.append(title)
-                vector_list.append(id_list)
-                summaries.append(summary)
+                content = "".join([page["content"] for page in data])
+                documents.append({
+                    "document_id": document_id,
+                    "content": content,
+                    "title": title,
+                    "vectors": id_list,
+                    "tag": tag
+                })
+
             except Exception as e:
                 print(f"Failed to process {title}: {e}")
                 st.session_state.upload_failure.append(title)
 
-        DocumentManager.sync_to_google_sheets(
-            titles, vector_list, summaries, tag)
+        DocumentManager._sync_to_google_sheets(documents)
+        DocumentManager._summarize(documents)
 
     @staticmethod
     @st.dialog("上傳文件")

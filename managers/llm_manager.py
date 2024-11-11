@@ -38,11 +38,15 @@ class LLMManger:
         return embeddings
 
     def summarize(self, content):
-        prompt = summarize_prompt_template.format(content=content)
-        response = self.gemini_client.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                max_output_tokens=20000
-            ),
-        )
-        return response.text
+        try:
+            prompt = summarize_prompt_template.format(content=content)
+            response = self.gemini_client.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    max_output_tokens=8192
+                ),
+            )
+            return response.text
+        except Exception as error:
+            print("Error while summarization:", error)
+            return error

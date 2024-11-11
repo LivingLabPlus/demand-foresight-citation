@@ -72,6 +72,13 @@ class SessionManager:
         return documents_for_user.reset_index(drop=True)
 
     @staticmethod
+    def load_documents():
+        documents = SheetManager.read("documents")
+        st.session_state.documents = SessionManager._get_documents_by_user(
+            documents, st.session_state.user_documents, st.session_state.username
+        )
+
+    @staticmethod
     def load_initial_data():
         # Load initial data into session state
         if "user_documents" not in st.session_state:
@@ -79,10 +86,7 @@ class SessionManager:
                 "userDocuments")
 
         if "documents" not in st.session_state:
-            documents = SheetManager.read("documents")
-            st.session_state.documents = SessionManager._get_documents_by_user(
-                documents, st.session_state.user_documents, st.session_state.username
-            )
+            SessionManager.load_documents()
 
         if "tags" not in st.session_state:
             st.session_state.tags = SheetManager.read("tags")
@@ -98,6 +102,22 @@ class SessionManager:
 
         if "index" not in st.session_state:
             st.session_state.index = PineconeManager.get_index()
+
+        if "summarization_task" not in st.session_state:
+            st.session_state.summarization_task = {}
+
+        # update st.session_state.documents if summarization has completed
+        unfinished_tasks = {}
+        for document_id, future in st.session_state.summarization_task.items():
+            if future.done():
+                st.session_state.documents.loc[
+                    st.session_state.documents["document_id"] == document_id, "summary"
+                ] = future.result()
+            else:
+                unfinished_tasks[document_id] = future
+
+        # remove finished tasks
+        st.session_state.summarization_task = unfinished_tasks
 
     @staticmethod
     def handle_session_messages():

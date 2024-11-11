@@ -117,6 +117,40 @@ class SheetManager:
             return error
 
     @staticmethod
+    def update_summary(worksheet_name, document_id, summary):
+        try:
+            # Initialize the Sheets API service
+            service = SheetManager.get_service()
+
+            df = SheetManager.read(worksheet_name)
+
+            # Find the row index where document_id matches
+            row_index = df[df['document_id'] == str(document_id)].index
+            if row_index.empty:
+                print("Document ID not found in worksheet.")
+                return
+
+            # Update the specific cell range for summary
+            cell_range = f"{worksheet_name}!D{row_index.item()+2}"
+
+            result = (
+                service.spreadsheets().values().update(
+                    spreadsheetId=st.secrets["connection"]["spreadsheet_id"],
+                    range=cell_range,
+                    valueInputOption="RAW",
+                    body={"values": [[summary]]},
+                ).execute()
+            )
+            print(f"{result.get('updatedCells')} cells updated.")
+            return result
+        except HttpError as error:
+            print(f"An error occurred: {error}")
+            return error
+        except Exception as error:
+            print(f"An error occurred: {error}")
+            return error
+
+    @staticmethod
     def write_rows(worksheet_name, dataframe):
         service = SheetManager.get_service()
 
