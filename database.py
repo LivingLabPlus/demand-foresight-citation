@@ -1,4 +1,5 @@
 import uuid
+import time
 import pandas as pd
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
@@ -105,8 +106,18 @@ def display_document_summaries():
     titles = DocumentManager.get_document_titles_by_tag(selected_tag)
     selected_title = st.selectbox("選取文件", titles)
 
-    if selected_title is not None:
-        summary = DocumentManager.get_document_summary_by_title(selected_title)
+    if selected_title is None:
+        return
+
+    summary = DocumentManager.get_document_summary_by_title(selected_title)
+    with st.empty():
+        with st.spinner("摘要產生中..."):
+            while summary == "摘要產生中...":
+                time.sleep(3)
+                SessionManager.load_documents()
+                summary = DocumentManager.get_document_summary_by_title(
+                    selected_title)
+
         st.markdown(summary)
 
 
