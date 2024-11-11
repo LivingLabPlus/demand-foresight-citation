@@ -210,7 +210,7 @@ class DocumentManager:
         """
         api_url = f"{st.secrets.BACKEND_URL}/summarize"
         try:
-            for document in documents:
+            for document in stqdm(documents, desc="傳送摘要請求"):
                 # Define the payload with document data
                 payload = {
                     "content": document["content"],
