@@ -25,22 +25,36 @@ def initialize_page():
 
 def display_documents_interface():
     """Display main interface for managing documents and tags."""
-    my_document_tab, shared_document_tab, document_summary_tab, edit_tag_tab = st.tabs(
-        ["我的文件", "共用文件", "文件摘要", "編輯標籤"])
     my_documents, shared_documents = DocumentManager.get_documents_by_permission(
         st.session_state.documents, st.session_state.user_documents)
 
-    with my_document_tab:
+    tab_names = ["我的文件"]
+    if st.secrets.modules.document_sharing:
+        tab_names.append("共用文件")
+    if st.secrets.modules.document_summarization:
+        tab_names.append("文件摘要")
+    if st.secrets.modules.tag_editing:
+        tab_names.append("編輯標籤")
+    tabs = st.tabs(tab_names)
+
+    with tabs[0]:
         display_my_documents(my_documents)
 
-    with shared_document_tab:
-        display_shared_documents(shared_documents)
+    tab_index = 1
+    if st.secrets.modules.document_sharing:
+        with tabs[tab_index]:
+            display_shared_documents(shared_documents)
+        tab_index += 1
 
-    with document_summary_tab:
-        display_document_summaries()
+    if st.secrets.modules.document_summarization:
+        with tabs[tab_index]:
+            display_document_summaries()
+        tab_index += 1
 
-    with edit_tag_tab:
-        display_tag_management()
+    if st.secrets.modules.tag_editing:
+        with tabs[tab_index]:
+            display_tag_management()
+        tab_index += 1
 
 
 def display_my_documents(my_documents):

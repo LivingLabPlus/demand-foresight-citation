@@ -204,9 +204,13 @@ class DocumentManager:
                 id_list = PineconeManager.upsert_documents(
                     data, desc=f"計算第 {i+1} / {len(uploaded_files)} 份文件特徵向量"
                 )
-                summary = DocumentManager._summarize(
-                    data, desc=f"產生第 {i+1} / {len(uploaded_files)} 份文件摘要"
-                )
+
+                if st.secrets.modules.document_summarization:
+                    summary = DocumentManager._summarize(
+                        data, desc=f"產生第 {i+1} / {len(uploaded_files)} 份文件摘要"
+                    )
+                else:
+                    summary = "摘要功能未開啟"
 
                 titles.append(title)
                 vector_list.append(id_list)
