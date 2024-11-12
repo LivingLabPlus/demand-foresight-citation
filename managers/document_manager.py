@@ -38,22 +38,6 @@ class DocumentManager:
 
         return data
 
-    # @staticmethod
-    # def _summarize(data, desc):
-    #     llm_manager = LLMManger()
-    #     content = "".join([page["content"] for page in data])
-    #     for _ in stqdm(range(1), desc=desc):
-    #         summary = llm_manager.summarize(content)
-    #     return summary
-
-    # @staticmethod
-    # def _summarize_in_thread(data, document_id):
-    #     llm_manager = LLMManger()
-    #     content = "".join([page["content"] for page in data])
-    #     summary = llm_manager.summarize(content)
-    #     SheetManager.update_summary("documents", document_id, summary)
-    #     return summary
-
     @staticmethod
     def get_document_titles_by_tag(tag):
         return st.session_state.documents[
@@ -214,7 +198,8 @@ class DocumentManager:
                 # Define the payload with document data
                 payload = {
                     "content": document["content"],
-                    "document_id": document["document_id"]
+                    "document_id": document["document_id"],
+                    "spreadsheet_id": st.secrets.spreadsheet_id
                 }
 
                 # Send the POST request to the FastAPI endpoint
