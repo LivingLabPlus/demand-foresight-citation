@@ -199,16 +199,17 @@ class DocumentManager:
                 payload = {
                     "content": document["content"],
                     "document_id": document["document_id"],
-                    "spreadsheet_id": st.secrets.spreadsheet_id
+                    "spreadsheet_id": st.secrets.connection.spreadsheet_id,
+                    "spreadsheet_credentials": dict(st.secrets.connection.credentials),
                 }
 
                 # Send the POST request to the FastAPI endpoint
                 requests.post(api_url, json=payload)
 
         except requests.exceptions.HTTPError as http_err:
-            return {"error": f"HTTP error occurred: {http_err}"}
+            print(f"HTTP error occurred: {http_err}")
         except Exception as err:
-            return {"error": f"Other error occurred: {err}"}
+            print(f"Other error occurred: {err}")
 
     @staticmethod
     def process_uploaded_files(uploaded_files, tag):
@@ -242,7 +243,7 @@ class DocumentManager:
                 st.session_state.upload_failure.append(title)
 
         DocumentManager._sync_to_google_sheets(documents)
-        DocumentManager._summarize(documents)
+        response = DocumentManager._summarize(documents)
 
     @staticmethod
     @st.dialog("上傳文件")
