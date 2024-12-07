@@ -63,6 +63,8 @@ def validate_token(token):
         st.session_state.username = user_info["username"]
         cookies["auth_token"] = token
         cookies.save()
+    elif response.status_code == 500:
+        st.error("Internal server error.")
     else:
         st.error("Invalid or expired token. Please request a new login link.")
 
