@@ -1,34 +1,24 @@
 import streamlit as st
 import streamlit_authenticator as stauth
 from streamlit_authenticator.utilities import LoginError
+from streamlit_cookies_manager import EncryptedCookieManager
 
+import requests
 import yaml
 from yaml.loader import SafeLoader
 
 st.set_page_config(page_title=st.secrets.PAGE_TITLE)
 
-if "config" not in st.session_state:
-    with open("users.yaml") as file:
-        st.session_state.config = yaml.load(file, Loader=SafeLoader)
-
-
-def empty_page():
-    pass
-
-
 # Define pages
 chat_page = st.Page("chat.py", title="聊天",
                     icon=":material/chat:", default=True)
 database_page = st.Page("database.py", title="資料庫", icon=":material/database:")
-account_page = st.Page("account.py", title="帳戶", icon=":material/person:")
-admin_page = st.Page("admin.py", title="文件管理", icon=":material/settings:")
+admin_page = st.Page("admin.py", title="使用者管理", icon=":material/settings:")
 
 # Initialize pages based on secrets
 pages = [chat_page]
 if st.secrets.modules.document_management:
     pages.append(database_page)
-if st.secrets.modules.authentication:
-    pages.append(account_page)
 
 
 def run_navigation(pages):
@@ -39,38 +29,65 @@ def run_navigation(pages):
 
 def cleanup():
     # Ensure chat history would be updated after switching user
-    if 'messages' in st.session_state:
-        st.session_state.pop('messages')
+    if "messages" in st.session_state:
+        st.session_state.pop("messages")
 
-    if 'documents' in st.session_state:
-        st.session_state.pop('documents')
+    if "documents" in st.session_state:
+        st.session_state.pop("documents")
 
 
-if st.secrets.modules.authentication:
-    authenticator = stauth.Authenticate(
-        st.session_state.config['credentials'],
-        st.session_state.config['cookie']['name'],
-        st.session_state.config['cookie']['key'],
-        st.session_state.config['cookie']['expiry_days'],
-    )
+# This should be on top of your script
+cookies = EncryptedCookieManager(
+    # This prefix will get added to all your cookie names.
+    # This way you can run your app on Streamlit Cloud without cookie name clashes with other apps.
+    prefix="demand_foresight/",
+    # You should really setup a long COOKIES_PASSWORD secret if you're running on Streamlit Cloud.
+    password=st.secrets.COOKIES_PASSWORD,
+)
+if not cookies.ready():
+    # Wait for the component to load and send us current cookies.
+    st.stop()
 
-    try:
-        authenticator.login()
-    except LoginError as e:
-        st.error(e)
 
-    if st.session_state.username == 'admin':
-        pages.insert(2, admin_page)
-
-    if st.session_state.authentication_status:
-        st.session_state.authenticator = authenticator
-        run_navigation(pages)
+def validate_token(token):
+    """Send the token to the backend for validation."""
+    api_url = f"{st.secrets.BACKEND_URL}/validate-token"
+    payload = {
+        "token": token,
+        "spreadsheet_id": st.secrets.connection.spreadsheet_id,
+        "spreadsheet_credentials": dict(st.secrets.connection.credentials),
+    }
+    response = requests.post(api_url, json=payload)
+    if response.status_code == 200:
+        user_info = response.json()
+        st.session_state.username = user_info["username"]
+        cookies["auth_token"] = token
+        cookies.save()
     else:
-        run_navigation([st.Page(empty_page)])
-        cleanup()
+        st.error("Invalid or expired token. Please request a new login link.")
 
-        if st.session_state.authentication_status is False:
-            st.error('使用者名稱/密碼不正確')
-else:
-    st.session_state['username'] = "default_user"
+
+def login():
+    # Get token from query parameters
+    token = st.query_params.get("token", None)
+
+    # Check for a stored token
+    stored_token = cookies.get("auth_token")
+
+    if token:
+        validate_token(token)
+    elif stored_token:
+        # Validate the token stored in cookies
+        validate_token(stored_token)
+    else:
+        st.warning("Please use a provided link to log in.")
+
+
+if "username" not in st.session_state:
+    st.session_state.username = None
+    login()
+
+if st.session_state.username == 'admin':
+    pages.insert(2, admin_page)
+if st.session_state.username is not None:
     run_navigation(pages)

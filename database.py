@@ -17,13 +17,6 @@ from managers import (
 )
 
 
-# Main function to initialize app and handle session state setup
-def initialize_page():
-    with st.spinner("讀取資料中..."):
-        SessionManager.load_initial_data()
-    SessionManager.handle_session_messages()
-
-
 def display_documents_interface():
     """Display main interface for managing documents and tags."""
     my_documents, shared_documents = DocumentManager.get_documents_by_permission(
@@ -174,7 +167,7 @@ def define_column_config():
 
 
 # Main execution
-initialize_page()
+SessionManager.initialize_page()
 st.header("資料庫")
 if SessionManager.is_data_loaded():
     display_documents_interface()

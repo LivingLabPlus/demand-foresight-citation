@@ -13,3 +13,4 @@ google-api-python-client
 stqdm
 streamlit-tags
 google-generativeai
+streamlit-cookies-manager

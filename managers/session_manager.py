@@ -79,6 +79,10 @@ class SessionManager:
         )
 
     @staticmethod
+    def token_to_link(token):
+        return f"{st.secrets.FRONTEND_URL}/?token={token}"
+
+    @staticmethod
     def load_initial_data():
         # Load initial data into session state
         if "user_documents" not in st.session_state:
@@ -90,6 +94,12 @@ class SessionManager:
 
         if "tags" not in st.session_state:
             st.session_state.tags = SheetManager.read("tags")
+
+        if "tokens" not in st.session_state:
+            tokens = SheetManager.read("tokens")
+            tokens["token"] = tokens["token"].apply(
+                SessionManager.token_to_link)
+            st.session_state.tokens = tokens
 
         # Initialize chat history
         if "messages" not in st.session_state:
@@ -127,6 +137,9 @@ class SessionManager:
             "delete_success": "資料刪除成功！",
             "add_tag_success": "標籤新增成功！",
             "delete_tag_success": "標籤刪除成功！",
+            "update_permission_success": "變更成功！",
+            "add_user_success": "使用者新增成功！",
+            "delete_user_success": "使用者刪除成功！",
         }
 
         for key, message in session_flags.items():
@@ -143,6 +156,13 @@ class SessionManager:
                 st.toast(message, icon="✅")
 
             st.session_state.pop(key)
+
+    @staticmethod
+    def initialize_page():
+        # Main function to initialize app and handle session state setup
+        with st.spinner("讀取資料中..."):
+            SessionManager.load_initial_data()
+        SessionManager.handle_session_messages()
 
     @staticmethod
     def is_data_loaded():
@@ -183,3 +203,18 @@ class SessionManager:
         filtered_tags = st.session_state.tags.drop(row_indices)
         filtered_tags = filtered_tags.reset_index(drop=True)
         st.session_state.tags = filtered_tags
+
+    @staticmethod
+    def add_token(username, token):
+        link = SessionManager.token_to_link(token)
+        new_token_row = [{"username": username, "token": link}]
+        new_df = pd.DataFrame(new_token_row)
+        new_df = pd.concat([st.session_state.tokens, new_df])
+        new_df = new_df.reset_index(drop=True)
+        st.session_state.tokens = new_df
+
+    @staticmethod
+    def delete_tokens(row_indices):
+        filtered_tokens = st.session_state.tokens.drop(row_indices)
+        filtered_tokens = filtered_tokens.reset_index(drop=True)
+        st.session_state.tokens = filtered_tokens
