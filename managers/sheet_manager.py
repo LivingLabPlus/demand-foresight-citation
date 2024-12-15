@@ -1,3 +1,4 @@
+import requests
 import pandas as pd
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
@@ -24,28 +25,52 @@ class SheetManager:
     @staticmethod
     def read(worksheet_name):
         try:
-            service = SheetManager.get_service()
+            # Construct API URL and payload
+            api_url = f"{st.secrets.BACKEND_URL}/read-sheet"
+            payload = {
+                "sheetname": worksheet_name,
+                "spreadsheet_id": st.secrets.connection.spreadsheet_id,
+                "spreadsheet_credentials": dict(st.secrets.connection.credentials),
+            }
 
-            # Define the range to fetch data from
-            range_name = f"{worksheet_name}"
+            # Send POST request
+            response = requests.post(api_url, json=payload)
 
-            # Get the data from the Google Sheet
-            result = service.spreadsheets().values().get(
-                spreadsheetId=st.secrets['connection']['spreadsheet_id'],
-                range=range_name
-            ).execute()
+            # Check if response status is OK
+            if response.status_code == 200:
+                try:
+                    # Attempt to parse JSON response
+                    data = response.json()
 
-            # Extract the rows and convert to a DataFrame
-            rows = result.get('values', [])
-            if not rows:
-                return pd.DataFrame()  # Return an empty DataFrame if no data
+                    # Validate structure of JSON response
+                    if "data" in data and "columns" in data:
+                        df = pd.DataFrame(
+                            data["data"], columns=data["columns"])
+                        return df
+                    else:
+                        print("Error: Missing 'data' or 'columns' in response.")
+                except ValueError as ve:
+                    # Handle JSON decoding error
+                    print("Error decoding JSON response:", ve)
+            else:
+                # Handle non-200 HTTP status codes
+                print(
+                    f"Error: Received status code {response.status_code}. Response text: {response.text}")
 
-            # Convert rows to DataFrame, assuming the first row contains headers
-            df = pd.DataFrame(rows[1:], columns=rows[0])
-            return df
+        except requests.exceptions.RequestException as req_err:
+            # Handle request-related errors (e.g., connection issues)
+            print("Request error:", req_err)
+
+        except KeyError as key_err:
+            # Handle missing or malformed secrets/configuration
+            print("Configuration error:", key_err)
+
         except Exception as e:
-            print("Exception:", e)
-            return None
+            # Catch-all for any other unexpected exceptions
+            print("An unexpected error occurred:", e)
+
+        # Return None if any error occurs
+        return None
 
     @staticmethod
     def append_rows(worksheet_name, rows_data):
