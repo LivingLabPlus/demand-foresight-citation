@@ -14,11 +14,13 @@ chat_page = st.Page("chat.py", title="聊天",
                     icon=":material/chat:", default=True)
 database_page = st.Page("database.py", title="資料庫", icon=":material/database:")
 admin_page = st.Page("admin.py", title="使用者管理", icon=":material/settings:")
+account_page = st.Page("account.py", title="帳戶", icon=":material/person:")
 
 # Initialize pages based on secrets
 pages = [chat_page]
 if st.secrets.modules.document_management:
     pages.append(database_page)
+pages.append(account_page)
 
 
 def run_navigation(pages):

@@ -101,6 +101,11 @@ class SessionManager:
                 SessionManager.token_to_link)
             st.session_state.tokens = tokens
 
+        if "cost" not in st.session_state:
+            df = SheetManager.read("cost")
+            df["cost"] = pd.to_numeric(df["cost"])
+            st.session_state.cost = df
+
         # Initialize chat history
         if "messages" not in st.session_state:
             messages = SheetManager.read("messages")
@@ -218,3 +223,12 @@ class SessionManager:
         filtered_tokens = st.session_state.tokens.drop(row_indices)
         filtered_tokens = filtered_tokens.reset_index(drop=True)
         st.session_state.tokens = filtered_tokens
+
+    @staticmethod
+    def update_cost(username, additional_cost):
+        if username in st.session_state.cost["username"].values:
+            st.session_state.cost.loc[
+                st.session_state.cost["username"] == username, "cost"
+            ] += additional_cost
+        else:
+            print(f"Username '{username}' not found in the DataFrame.")

@@ -73,13 +73,15 @@ def get_rag_chain(
             model=model_id,
             temperature=temperature,
             max_tokens=16384,
-            api_key=st.secrets['OPENAI_API_KEY']
+            model_kwargs={"stream_options": {"include_usage": True}},
+            api_key=st.secrets['OPENAI_API_KEY'],
         )
     elif 'claude' in model_id:
         llm = ChatAnthropic(
             model=model_id,
             temperature=temperature,
             max_tokens=8192,
+            stream_usage=True,
             api_key=st.secrets['ANTHROPIC_API_KEY']
         )
 

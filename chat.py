@@ -1,5 +1,6 @@
 import json
 import uuid
+import requests
 import pandas as pd
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
@@ -7,6 +8,7 @@ from googleapiclient.errors import HttpError
 from langchain_conversational_rag import rag
 from openai import OpenAI
 from datetime import datetime
+from langchain_community.callbacks import get_openai_callback
 
 from managers import DocumentManager, SheetManager, SessionManager
 
@@ -187,6 +189,35 @@ def add_chat_history():
         update_chat_history(st.session_state.user_query, 'user')
 
 
+def update_cost(additional_cost):
+    cost = st.session_state.cost.loc[
+        st.session_state.cost["username"] == st.session_state.username, "cost"
+    ]
+    new_cost = cost.iloc[0] + additional_cost
+
+    api_url = f"{st.secrets.BACKEND_URL}/update-cost"
+    payload = {
+        "username": st.session_state.username,
+        "new_cost": new_cost,
+        "spreadsheet_id": st.secrets.connection.spreadsheet_id,
+        "spreadsheet_credentials": dict(st.secrets.connection.credentials),
+    }
+
+    response = requests.post(api_url, json=payload)
+    if response.status_code != 200:
+        st.error("無法更新花費金額")
+        return
+
+    SessionManager.update_cost(
+        st.session_state.username,
+        additional_cost
+    )
+
+
+def calculate_cost(prompt_tokens, completion_tokens):
+    return (3 * prompt_tokens + 15 * completion_tokens) / 1e6
+
+
 # Accept user input
 if prompt := st.chat_input("輸入你的問題", key="user_query",
                            on_submit=add_chat_history, disabled=disable_chat_input):
@@ -207,9 +238,21 @@ if prompt := st.chat_input("輸入你的問題", key="user_query",
     # Display assistant response in chat message container
     with st.chat_message("assistant"):
         def generate_response():
-            for chunk in stream:
-                if answer_chunk := chunk.get("answer"):
-                    yield (answer_chunk)
+            with get_openai_callback() as cb:
+                for chunk in stream:
+                    if answer_chunk := chunk.get("answer"):
+                        yield (answer_chunk)
+
+                if "gpt" in select_model:
+                    total_cost = cb.total_cost
+                else:
+                    # calculate pricing for anthropic model
+                    total_cost = calculate_cost(
+                        cb.prompt_tokens,
+                        cb.completion_tokens
+                    )
+
+                update_cost(total_cost)
 
         response = st.write_stream(generate_response)
 

@@ -117,7 +117,7 @@ def manage_shared_documents():
 
 
 def add_new_user(username):
-    api_url = f"{st.secrets.BACKEND_URL}/generate-token"
+    api_url = f"{st.secrets.BACKEND_URL}/add-user"
     payload = {
         "username": username,
         "spreadsheet_id": st.secrets.connection.spreadsheet_id,
@@ -215,8 +215,17 @@ def manage_login_links():
 
 
 SessionManager.initialize_page()
-shared_documents_tab, login_links_tab = st.tabs(["共用文件", "登入連結"])
+shared_documents_tab, login_links_tab, cost_tab = st.tabs(
+    ["共用文件", "登入連結", "使用額度"])
 with shared_documents_tab:
     manage_shared_documents()
 with login_links_tab:
     manage_login_links()
+with cost_tab:
+    st.bar_chart(
+        st.session_state.cost,
+        x="username",
+        y="cost",
+        x_label="使用者名稱",
+        y_label="花費金額（$USD）"
+    )
