@@ -214,6 +214,22 @@ def manage_login_links():
         )
 
 
+def display_usage():
+    # remove users that are not in the "tokens" dataframe
+    users = st.session_state.tokens["username"].tolist()
+    cost = st.session_state.cost[
+        st.session_state.cost["username"].isin(users)
+    ]
+
+    st.bar_chart(
+        cost,
+        x="username",
+        y="cost",
+        x_label="使用者名稱",
+        y_label="花費金額（$USD）"
+    )
+
+
 SessionManager.initialize_page()
 shared_documents_tab, login_links_tab, cost_tab = st.tabs(
     ["共用文件", "登入連結", "使用額度"])
@@ -222,10 +238,4 @@ with shared_documents_tab:
 with login_links_tab:
     manage_login_links()
 with cost_tab:
-    st.bar_chart(
-        st.session_state.cost,
-        x="username",
-        y="cost",
-        x_label="使用者名稱",
-        y_label="花費金額（$USD）"
-    )
+    display_usage()

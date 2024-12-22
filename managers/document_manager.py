@@ -13,6 +13,7 @@ from .sheet_manager import SheetManager
 from .pinecone_manager import PineconeManager
 from .session_manager import SessionManager
 from .llm_manager import LLMManger
+from .cost_manager import CostManager
 
 
 class DocumentManager:
@@ -199,6 +200,7 @@ class DocumentManager:
                 payload = {
                     "content": document["content"],
                     "document_id": document["document_id"],
+                    "username": st.session_state.username,
                     "spreadsheet_id": st.secrets.connection.spreadsheet_id,
                     "spreadsheet_credentials": dict(st.secrets.connection.credentials),
                 }
@@ -216,6 +218,7 @@ class DocumentManager:
         """Process each uploaded file by loading, embedding, and uploading to Google Sheets."""
         st.session_state.upload_failure = []
         documents = []
+        total_price = 0
 
         for i, uploaded_file in enumerate(uploaded_files):
             document_id = str(uuid.uuid4())
@@ -225,10 +228,11 @@ class DocumentManager:
                 data = DocumentManager.load_pdf(
                     bytes_data, tag, title, desc=f"讀取第 {i+1} / {len(uploaded_files)} 份文件"
                 )
-                id_list = PineconeManager.upsert_documents(
+                id_list, price = PineconeManager.upsert_documents(
                     data, desc=f"計算第 {i+1} / {len(uploaded_files)} 份文件特徵向量"
                 )
 
+                total_price += price
                 content = "".join([page["content"] for page in data])
                 documents.append({
                     "document_id": document_id,
@@ -244,6 +248,7 @@ class DocumentManager:
 
         DocumentManager._sync_to_google_sheets(documents)
         response = DocumentManager._summarize(documents)
+        CostManager.update_cost(total_price)
 
     @staticmethod
     @st.dialog("上傳文件")

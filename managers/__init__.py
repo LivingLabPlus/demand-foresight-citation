@@ -4,3 +4,4 @@ from .pinecone_manager import PineconeManager
 from .session_manager import SessionManager
 from .sheet_manager import SheetManager
 from .tag_manager import TagManager
+from .cost_manager import CostManager

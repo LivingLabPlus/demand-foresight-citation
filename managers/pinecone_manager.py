@@ -64,17 +64,19 @@ class PineconeManager:
     def upsert_documents(documents, desc, batch_size=64):
         llm_manager = LLMManger()
         id_list = []
+        total_price = 0
 
         for i in stqdm(range(0, len(documents), batch_size), desc=desc):
             docs = documents[i: i + batch_size]
             contents = [doc["content"] for doc in docs]
-            embeddings = llm_manager.get_embeddings(contents)
+            embeddings, price = llm_manager.get_embeddings(contents)
 
             if embeddings is None:
                 doc_name = docs[0]["name"]
                 print(f"cannot encode {doc_name} page {i}-{i + batch_size}")
                 continue
 
+            total_price += price
             ids_batch = [
                 PineconeManager.generate_unique_id(doc["content"])
                 for doc in docs
@@ -83,7 +85,7 @@ class PineconeManager:
             st.session_state.index.upsert(vectors=to_upsert)
             id_list += ids_batch
 
-        return id_list
+        return id_list, total_price
 
     @staticmethod
     def fetch_document_content(vector_list):
