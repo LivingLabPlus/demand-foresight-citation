@@ -123,35 +123,32 @@ def display_document_summaries():
 
 def display_tag_management():
     """Display and handle actions for '編輯標籤' tab."""
-    if st.session_state.username == "admin":
-        tag_event = st.dataframe(
-            st.session_state.tags,
-            on_select="rerun",
-            selection_mode="multi-row",
-            hide_index=True,
-            column_config={"tag": st.column_config.TextColumn(
-                "標籤", width="medium")}
+    tag_event = st.dataframe(
+        st.session_state.tags,
+        on_select="rerun",
+        selection_mode="multi-row",
+        hide_index=True,
+        column_config={"tag": st.column_config.TextColumn(
+            "標籤", width="medium")}
+    )
+
+    columns = st.columns([1] * 9)
+    with columns[0]:
+        st.button(
+            "新增",
+            on_click=TagManager.add_tags,
+            key="add_tags_button"
         )
 
-        columns = st.columns([1] * 9)
-        with columns[0]:
-            st.button(
-                "新增",
-                on_click=TagManager.add_tags,
-                key="add_tags_button"
-            )
-
-        with columns[1]:
-            st.button(
-                "刪除",
-                type="primary",
-                on_click=TagManager.delete_tags,
-                args=(tag_event,),
-                disabled=not bool(tag_event.selection.rows),
-                key="delete_tags_button"
-            )
-    else:
-        st.info("只有管理者可以編輯標籤")
+    with columns[1]:
+        st.button(
+            "刪除",
+            type="primary",
+            on_click=TagManager.delete_tags,
+            args=(tag_event,),
+            disabled=not bool(tag_event.selection.rows),
+            key="delete_tags_button"
+        )
 
 
 def define_column_config():
