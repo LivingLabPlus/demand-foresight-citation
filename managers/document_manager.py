@@ -258,5 +258,6 @@ class DocumentManager:
         disabled = (len(matching_titles) != 0) or (len(uploaded_files) == 0)
 
         if st.button("提交", disabled=disabled, key="submit_button"):
+            st.info("上傳文件中，請勿關閉視窗")
             DocumentManager.process_uploaded_files(uploaded_files, tag)
             st.rerun()
