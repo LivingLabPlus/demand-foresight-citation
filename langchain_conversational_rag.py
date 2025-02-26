@@ -30,13 +30,13 @@ When a user asks a question, perform the following tasks:
 2. Assign numbers to these quotes in the order they were found. Each segment of the documentation should only be assigned a number once.
 3. Based on the document and quotes, answer the question. If no relevant documents are found, answer "資料庫中找不到相關資料".
 4. When answering the question, provide citations references in square brackets containing the number generated in step 2 (the number the citation was found)
-5. Answer in "traditional Chinese", and structure the output in the following markdown format:
+5. Answer in "traditional Chinese", and structure the output in this concise markdown format:
 ```
-Markdown格式的回答[1]
+Answer with citations [1][2]
 
-## 資料來源
-1. {來源1名稱}，頁數{第幾頁}
-2. {來源2名稱}，頁數{第幾頁}
+## Sources
+1. {Source1}, p.{page}
+2. {Source2}, p.{page}
 ...
 ```'''
 contextualize_q_system_prompt = (
@@ -83,7 +83,9 @@ def format_docs(docs):
         name = doc.metadata['name']
         page = doc.metadata['page']
         content = doc.page_content
-        result.append(f'<item name="{name}" page="{page}">\n<page_content>\n{content}\n</page_content>\n</item>')
+        #result.append(f'<item name="{name}" page="{page}">\n<page_content>\n{content}\n</page_content>\n</item>')
+        # Shortened format, keeping only essential information
+        result.append(f'<item name="{name}" page="{page}">{content}</item>')
 
     return '\n'.join(result)
 
