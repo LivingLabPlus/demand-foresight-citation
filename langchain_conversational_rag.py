@@ -97,6 +97,31 @@ def get_rag_chain(
         api_key=st.secrets.LANGCHAIN_API_KEY
     )
 
+    # Override the hub prompt with your updated version
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", """You are an expert at answering questions using document citations.
+
+    Here are the documents:
+    <documents>
+    {context}
+    </documents>
+
+    When answering:
+    1. Find up to 5 most relevant quotes from the documents.
+    2. Number these quotes sequentially (1-5). Each document segment should receive only one number.
+    3. Answer based on these documents. If no relevant information is found, respond with "No relevant information found in the database".
+    4. Include citation numbers in square brackets [1] where appropriate.
+    5. Answer in traditional Chinese using this format:
+
+    Answer content[1][2]
+
+    ## Sources
+    1. {Source1}, p.{page}
+    2. {Source2}, p.{page}"""),
+        MessagesPlaceholder(variable_name="chat_history"),
+        ("human", "{input}")
+    ])
+
     chain = (
         RunnablePassthrough.assign(
             context=(lambda x: format_docs(x["context"])))
