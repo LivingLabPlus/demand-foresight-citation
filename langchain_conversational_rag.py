@@ -35,11 +35,8 @@ When a user asks a question, perform the following tasks:
 Markdown格式的回答[1]
 
 ## 資料來源
-
-### 來源一
-- 名稱: "string"
-- 頁數: "string"
-- 相關段落: "string" // relevant passage in a document
+1. {來源1名稱}，頁數{第幾頁}
+2. {來源2名稱}，頁數{第幾頁}
 ...
 ```'''
 contextualize_q_system_prompt = (
