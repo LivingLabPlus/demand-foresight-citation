@@ -35,10 +35,12 @@ When a user asks a question, perform the following tasks:
 Answer with citations [1][2]
 
 ## Sources
-1. {Source1}, p.{page}
-2. {Source2}, p.{page}
+1. <Source1>, p.<page>
+2. <Source2>, p.<page>
 ...
-```'''
+```
+Replace <Source1>, <Source2>, etc., with the actual source names, and <page> with the relevant page numbers if available.
+'''
 contextualize_q_system_prompt = (
     "Given a chat history and the latest user question "
     "which might reference context in the chat history, "
