@@ -146,10 +146,12 @@ def define_column_config():
         "tag": st.column_config.TextColumn(
             "標籤",
             help="文件類別",
-            width="small"
         ),
         "summary": None,
-        "uploaded_at": None
+        "created_at": st.column_config.DatetimeColumn(
+            "上傳時間",
+            format="YYYY-MM-DD HH:mm"
+        )
     }
 
 

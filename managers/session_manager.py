@@ -64,7 +64,9 @@ class SessionManager:
         response = requests.get(api_url, headers=headers)
         if response.status_code == 200:
             documents = response.json()["documents"]
-            st.session_state.documents = pd.DataFrame(documents)
+            documents = pd.DataFrame(documents)
+            documents["created_at"] = pd.to_datetime(documents["created_at"])
+            st.session_state.documents = documents
         else:
             st.error("無法讀取文件")
 

@@ -188,10 +188,12 @@ def display_user_data(selected_rows):
         "tag": st.column_config.TextColumn(
             "標籤",
             help="文件類別",
-            width="small"
         ),
         "summary": None,
-        "uploaded_at": None
+        "created_at": st.column_config.DatetimeColumn(
+            "上傳時間",
+            format="YYYY-MM-DD HH:mm"
+        )
     }
     st.dataframe(
         documents,
@@ -245,7 +247,6 @@ def manage_login_links():
 
 
 SessionManager.initialize_page()
-# login_links_tab, user_tab = st.tabs(["登入連結", "使用者資料"])
 st.subheader("使用者管理")
 st.text("選取使用者以展示更多資料")
 manage_login_links()
