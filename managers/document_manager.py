@@ -209,7 +209,7 @@ class DocumentManager:
                 new_document_row = DocumentManager.create_document_row(
                     document_id,
                     documents[i]["title"],
-                    "摘要產生中...",
+                    "摘要產生中，請稍後重新整理",
                     documents[i]["tag"]
                 )
 
