@@ -14,7 +14,7 @@ These files define the primary pages of the Streamlit app and their respective f
   An admin-only interface for managing document access permissions. Admins can select users, view their document permissions, and adjust document visibility.
 
 - **`chat.py`**:  
-  Facilitates a chat-based interface with language model integration, enabling conversational interactions. Conversations are stored in a Google Sheet, and each message thread can be titled for easy reference.
+  Facilitates a chat-based interface with language model integration, enabling conversational interactions.
 
 - **`database.py`**:  
   Manages document and tag viewing. Users can see their documents, shared documents, and summaries if enabled. This file provides a tabbed interface for a more organized document display.
@@ -24,22 +24,19 @@ These files define the primary pages of the Streamlit app and their respective f
 Manager files handle data processing and integration across the app:
 
 - **`document_manager.py`**:  
-  Manages document processing, particularly PDF handling. It extracts and cleans text from PDFs, organizes pages with tags, and integrates with `SheetManager`, `PineconeManager`, and `SessionManager` for document metadata and storage.
+  Manages document processing, particularly PDF handling. It extracts and cleans text from PDFs, organizes pages with tags.
 
 - **`llm_manager.py`**:  
-  Interfaces with OpenAI and Gemini language models for tasks like text summarization and embedding generation. It includes prompt templates to ensure consistency in document summaries and interactions.
+  Interfaces with OpenAI language models for embedding generation tasks.
 
 - **`pinecone_manager.py`**:  
   Configures and manages a Pinecone vector database, where document embeddings are stored and retrieved for similarity searches. This manager handles setting up and maintaining the Pinecone index.
 
 - **`session_manager.py`**:  
-  Manages user session data, including chat message transformation and caching. It formats message histories for consistent display and integrates with `SheetManager` and `PineconeManager`.
-
-- **`sheet_manager.py`**:  
-  Connects to Google Sheets for data storage and retrieval, facilitating real-time data updates. It manages API authentication and operations like reading and writing data to specific worksheets.
+  Manages user session data, including chat message transformation and caching.
 
 - **`tag_manager.py`**:  
-  Provides a tagging system for document categorization. Users can add and delete tags, which are validated against existing tags for consistency. Tag changes are stored in Google Sheets and synchronized with the session state.
+  Provides a tagging system for document categorization. Users can add and delete tags, which are validated against existing tags for consistency. Tag changes are transmitted to backend and synchronized with the session state.
 
 ### RAG File
 
@@ -51,18 +48,16 @@ Manager files handle data processing and integration across the app:
 ### Getting Started
 
 1. **Install Required Packages**:  
-   Ensure that dependencies like Streamlit, Pinecone, OpenAI, LangChain, and Google Sheets API are installed.
+   Ensure that dependencies like Streamlit, Pinecone, OpenAI, LangChain are installed.
    
 2. **Configure Secrets**:  
-   Store sensitive keys (e.g., API keys for OpenAI, Pinecone, and Google Sheets) in the Streamlit `secrets` configuration file.
+   Store sensitive keys (e.g., API keys for OpenAI and Pinecone, etc.) in the Streamlit `secrets` configuration file.
 
 3. **Run the Application**:  
    Start the application by running `streamlit run index.py` from the terminal.
 
 ### Additional Information
-
-- **Authentication**: The app uses a configuration file (`users.yaml`) for managing user credentials. This file should be configured securely and updated as needed.
-- **Document Storage**: Document data is managed through Google Sheets, Pinecone, and session state.
+- This app authenticates users using a JWT token provided as a query parameter. Once validated, the token is stored in cookies, allowing users to remain authenticated without re-entering the token each time.
 
 ---
 
@@ -71,14 +66,14 @@ Manager files handle data processing and integration across the app:
 ```
 PINECONE_API_KEY = ""
 OPENAI_API_KEY = ""
-GEMINI_API_KEY = ""
 ANTHROPIC_API_KEY = ""
 LANGCHAIN_API_KEY = ""
 MODEL_OPTION = [ "gpt-4o-2024-08-06", "claude-3-5-sonnet-20241022" ]
-# Name of Pinecone index
 INDEX_NAME = "demand-foresight"
-# Website page name 
-PAGE_TITLE = "International Cooperation"
+ADMIN_NAME = "demandManager"
+FRONTEND_URL = "https://livinglab-demand-foresight-dev.streamlit.app"
+BACKEND_URL = "http://61.64.60.30/demand-foresight-backend"
+COOKIES_PASSWORD = "221f8be27483c5fab6db40d618f7875f3dc22768960e3a43696552d28db03f94"
 
 [prompts]
 # Prompt name stored on langchain prompt hub
@@ -86,29 +81,12 @@ rag_contextualize_q_system_prompt = "rag_contextualize_q_system_prompt"
 rag_system_prompt = "rag_system_prompt:f229d706"
 
 [modules]
-authentication = false
 document_management = true
-document_sharing = true
-document_summarization = false
-tag_editing = false
-doc_chat = false
+document_summarization = true
+tag_editing = true
+doc_chat = true
 
 [rag]
 # Number of documents to retrieve
 top_k = 20
-
-[connection]
-# Google sheet connection info
-spreadsheet_id = ""
-
-[connection.credentials]
-type = ""
-project_id = ""
-private_key_id = ""
-client_email = ""
-client_id = ""
-auth_uri = ""
-token_uri = ""
-auth_provider_x509_cert_url = ""
-client_x509_cert_url = ""
 ```
