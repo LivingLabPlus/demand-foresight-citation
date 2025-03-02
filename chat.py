@@ -70,7 +70,7 @@ if 'selected_dialog' not in st.session_state:
     st.session_state.selected_dialog = None
 
 with st.sidebar:
-    history_tab, option_tab = st.tabs(["對話紀錄", "對話選項"])
+    option_tab, history_tab = st.tabs(["對話選項", "對話紀錄"])
 
     with option_tab:
         select_model = st.selectbox(
