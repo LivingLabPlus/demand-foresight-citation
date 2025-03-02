@@ -6,6 +6,8 @@ from managers import CostManager
 
 st.subheader("帳戶")
 st.markdown(f"**使用者名稱:** `{st.session_state['username']}`")
+st.markdown(f"**帳戶到期時間:** {st.session_state['token_expire_date']}")
+
 all_cost, monthly_cost = CostManager.get_user_usage()
 if all_cost == -1 or len(monthly_cost) != 12:
     st.error("無法獲取使用額度！")

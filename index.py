@@ -4,6 +4,7 @@ from streamlit_cookies_manager import EncryptedCookieManager
 import requests
 import yaml
 from yaml.loader import SafeLoader
+from datetime import datetime
 
 # This should be on top of your script
 cookies = EncryptedCookieManager(
@@ -46,6 +47,14 @@ def cleanup():
         st.session_state.pop("documents")
 
 
+def convert_expire_time(date_str):
+    # Parse the input string into a datetime object
+    dt = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+
+    # Convert it to the desired format
+    return dt.strftime("%Y-%m-%d")
+
+
 def validate_token(token):
     """Send the token to the backend for validation."""
     api_url = f"{st.secrets.BACKEND_URL}/users/me"
@@ -62,7 +71,10 @@ def validate_token(token):
     if response.status_code == 200:
         user_info = response.json()
         st.session_state.username = user_info["username"]
+        st.session_state.token_expire_date = convert_expire_time(user_info["token_expire_datetime"])
         st.session_state.token = token
+        
+        # save token in cookies
         cookies["auth_token"] = token
         cookies.save()
     elif response.status_code == 500:
