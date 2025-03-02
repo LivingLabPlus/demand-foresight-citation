@@ -1,13 +1,21 @@
 import streamlit as st
-import streamlit_authenticator as stauth
-from streamlit_authenticator.utilities import LoginError
 from streamlit_cookies_manager import EncryptedCookieManager
 
 import requests
 import yaml
 from yaml.loader import SafeLoader
 
-st.set_page_config(page_title=st.secrets.PAGE_TITLE)
+# This should be on top of your script
+cookies = EncryptedCookieManager(
+    # This prefix will get added to all your cookie names.
+    # This way you can run your app on Streamlit Cloud without cookie name clashes with other apps.
+    prefix="demand_foresight/",
+    # You should really setup a long COOKIES_PASSWORD secret if you're running on Streamlit Cloud.
+    password=st.secrets.COOKIES_PASSWORD,
+)
+if not cookies.ready():
+    # Wait for the component to load and send us current cookies.
+    st.stop()
 
 # Define pages
 chat_page = st.Page("chat.py", title="聊天",
@@ -38,31 +46,23 @@ def cleanup():
         st.session_state.pop("documents")
 
 
-# This should be on top of your script
-cookies = EncryptedCookieManager(
-    # This prefix will get added to all your cookie names.
-    # This way you can run your app on Streamlit Cloud without cookie name clashes with other apps.
-    prefix="demand_foresight/",
-    # You should really setup a long COOKIES_PASSWORD secret if you're running on Streamlit Cloud.
-    password=st.secrets.COOKIES_PASSWORD,
-)
-if not cookies.ready():
-    # Wait for the component to load and send us current cookies.
-    st.stop()
-
-
 def validate_token(token):
     """Send the token to the backend for validation."""
-    api_url = f"{st.secrets.BACKEND_URL}/validate-token"
-    payload = {
-        "token": token,
-        "spreadsheet_id": st.secrets.connection.spreadsheet_id,
-        "spreadsheet_credentials": dict(st.secrets.connection.credentials),
+    api_url = f"{st.secrets.BACKEND_URL}/users/me"
+
+    # Define the authentication header
+    headers = {
+        "Authorization": f"Bearer {token}"
     }
-    response = requests.post(api_url, json=payload)
+
+    # Send the GET request with headers
+    response = requests.get(api_url, headers=headers)
+
+    # Check the response status
     if response.status_code == 200:
         user_info = response.json()
         st.session_state.username = user_info["username"]
+        st.session_state.token = token
         cookies["auth_token"] = token
         cookies.save()
     elif response.status_code == 500:
@@ -83,15 +83,15 @@ def login():
     elif stored_token:
         # Validate the token stored in cookies
         validate_token(stored_token)
-    else:
-        st.warning("Please use a provided link to log in.")
 
 
 if "username" not in st.session_state:
     st.session_state.username = None
     login()
 
-if st.session_state.username == 'admin':
+if st.session_state.username == st.secrets.ADMIN_NAME:
     pages.insert(2, admin_page)
 if st.session_state.username is not None:
     run_navigation(pages)
+else:
+    st.warning("Please use a provided link to log in.")

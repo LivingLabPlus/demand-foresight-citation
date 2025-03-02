@@ -1,9 +1,9 @@
 import hashlib
+import requests
 import streamlit as st
 from stqdm import stqdm
 from pinecone import Pinecone, ServerlessSpec
 
-from .sheet_manager import SheetManager
 from .llm_manager import LLMManger
 
 
@@ -39,14 +39,27 @@ class PineconeManager:
 
     @staticmethod
     def delete_pinecone_documents(selected_document_ids):
-        vectors = SheetManager.read("vectors")
-        filtered_df = vectors[vectors["document_id"].isin(
-            selected_document_ids)]
-        vector_ids = filtered_df["vector_id"].tolist()
+        headers = {
+            "Authorization": f"Bearer {st.session_state.token}"
+        }
+        for document_id in selected_document_ids:
+            # get vector ids of the document from database   
+            response = requests.get(
+                f"{st.secrets.BACKEND_URL}/vectors",
+                params={"document_id": document_id},
+                headers=headers
+            )
+            if response.status_code == 200:
+                vector_ids = response.json()["vectors"]
 
-        for i in range(0, len(vector_ids), 1000):
-            batch_ids = vector_ids[i: i + 1000]
-            st.session_state.index.delete(ids=batch_ids)
+                # delete pincecone vectors in batches
+                for i in range(0, len(vector_ids), 1000):
+                    batch_ids = vector_ids[i: i + 1000]
+                    st.session_state.index.delete(ids=batch_ids)
+
+            else:
+                st.error("無法刪除 Pinecone 向量！")
+                return
 
     @staticmethod
     def generate_unique_id(content: str) -> str:

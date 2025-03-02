@@ -10,7 +10,7 @@ from openai import OpenAI
 from datetime import datetime
 from langchain_community.callbacks import get_openai_callback
 
-from managers import DocumentManager, SheetManager, SessionManager, CostManager
+from managers import DocumentManager, SessionManager, CostManager
 
 client = OpenAI(api_key=st.secrets['OPENAI_API_KEY'])
 # reload messages from google sheet
@@ -139,17 +139,19 @@ def add_message_to_database(title, chat_id, content, role):
     message_id = str(uuid.uuid4())
     timestamp = datetime.now().strftime(datetime_format)
 
-    new_rows = [[
-        st.session_state['username'],
-        str(chat_id),
-        message_id,
-        content,
-        title,
-        timestamp,
-        role,
-    ]]
-
-    SheetManager.append_rows('messages', new_rows)
+    api_url = f"{st.secrets.BACKEND_URL}/messages"
+    new_message = {
+        "username": st.session_state.username,
+        "chat_id": str(chat_id),
+        "message_id": message_id,
+        "content": content,
+        "title": title,
+        "timestamp": timestamp,
+        "role": role
+    }
+    response = requests.post(api_url, json=new_message)
+    if response.status_code != 200:
+        st.error("新增訊息發生錯誤！")
 
 
 def update_chat_history(response, role):

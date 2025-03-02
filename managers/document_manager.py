@@ -9,7 +9,6 @@ import concurrent.futures
 from pathlib import Path
 from stqdm import stqdm
 
-from .sheet_manager import SheetManager
 from .pinecone_manager import PineconeManager
 from .session_manager import SessionManager
 from .llm_manager import LLMManger
@@ -84,17 +83,17 @@ class DocumentManager:
     def create_document_row(document_id, title, summary, tag):
         """Create a dictionary for a new document row."""
         return [{
-            "document_id": document_id,
+            "id": document_id,
             "title": title,
             "tag": tag,
             "summary": summary,
         }]
 
     @staticmethod
-    def create_user_document_row(document_id):
+    def create_user_document_row(user_document_id, document_id):
         """Create a dictionary for a new user document row with write access."""
         return [{
-            "id": str(uuid.uuid4()),
+            "id": user_document_id,
             "username": st.session_state["username"],
             "document_id": document_id,
             "access_level": "write",
@@ -121,7 +120,7 @@ class DocumentManager:
     @staticmethod
     def get_document_ids(my_documents, selected_indices):
         """Retrieve document IDs for the selected rows."""
-        return my_documents.loc[selected_indices, "document_id"].tolist()
+        return my_documents.loc[selected_indices, "id"].tolist()
 
     @staticmethod
     def _display_delete_confirmation(my_documents, selected_indices):
@@ -146,13 +145,25 @@ class DocumentManager:
 
         with st.spinner(text="刪除文件中..."):
             document_ids = DocumentManager.get_document_ids(
-                my_documents, selected_indices)
+                my_documents, 
+                selected_indices
+            )
 
             PineconeManager.delete_pinecone_documents(document_ids)
-            SheetManager.delete_documents(
-                document_ids)
-            SessionManager.delete_documents(
-                document_ids)
+            SessionManager.delete_documents(document_ids)
+
+            headers = {
+                "Authorization": f"Bearer {st.session_state.token}"
+            }
+
+            for document_id in document_ids:
+                response = requests.delete(
+                    f"{st.secrets.BACKEND_URL}/documents/{document_id}",
+                    headers=headers
+                )
+                if response.status_code != 200:
+                    st.error("無法刪除文件！")
+                    return
 
         st.session_state.delete_success = 1
         st.rerun()
@@ -161,52 +172,71 @@ class DocumentManager:
     def _sync_to_google_sheets(documents):
         """Sync the processed documents and vectors to Google Sheets."""
         for i in stqdm(range(len(documents)), desc="同步至資料庫"):
-            try:
-                document_id = documents[i]["document_id"]
+            try:               
+                headers = {
+                    "Authorization": f"Bearer {st.session_state.token}"
+                }
+                
+                # update documents
+                response = requests.post(
+                    f"{st.secrets.BACKEND_URL}/documents",
+                    json={
+                        "title": documents[i]["title"],
+                        "tag": documents[i]["tag"],
+                        "content": documents[i]["content"]
+                    },
+                    headers=headers
+                )
+                if response.status_code == 200:
+                    document_id = response.json()["document_id"]
+                    documents[i]["document_id"] = document_id
+                else:
+                    raise Exception(f"/documents responds status code {response.status_code}")
+
+                # update vectors
+                response = requests.post(
+                    f"{st.secrets.BACKEND_URL}/vectors",
+                    json={
+                        "document_id": document_id,
+                        "vector_ids": documents[i]["vectors"] 
+                    },
+                    headers=headers
+                )
+                if response.status_code != 200:
+                    raise Exception(f"/vectors responds status code {response.status_code}")
+
+                # update session_state
                 new_document_row = DocumentManager.create_document_row(
                     document_id,
                     documents[i]["title"],
                     "摘要產生中...",
                     documents[i]["tag"]
                 )
-                new_user_document_row = DocumentManager.create_user_document_row(
-                    document_id)
-                new_vectors = DocumentManager.create_vector_rows(
-                    document_id, documents[i]["vectors"])
 
-                SheetManager.upload_document(
-                    new_document_row,
-                    new_user_document_row,
-                    new_vectors
-                )
-
-                SessionManager.upload_document(
-                    new_document_row,
-                    new_user_document_row
-                )
+                SessionManager.upload_document(new_document_row)
 
             except Exception as e:
-                print(f"Failed to upload {titles[i]} to Google Sheets: {e}")
-                st.session_state.upload_failure.append(titles[i])
+                print(f"Failed to upload {documents[i]['title']} to Google Sheets: {e}")
+                st.session_state.upload_failure.append(documents[i]["title"])
 
     def _summarize(documents):
         """
         Calls the FastAPI /summarize endpoint.
         """
-        api_url = f"{st.secrets.BACKEND_URL}/summarize"
+        
         try:
             for document in stqdm(documents, desc="傳送摘要請求"):
                 # Define the payload with document data
+                api_url = f"{st.secrets.BACKEND_URL}/documents/{document['document_id']}/summary"
                 payload = {
                     "content": document["content"],
-                    "document_id": document["document_id"],
                     "username": st.session_state.username,
-                    "spreadsheet_id": st.secrets.connection.spreadsheet_id,
-                    "spreadsheet_credentials": dict(st.secrets.connection.credentials),
                 }
 
-                # Send the POST request to the FastAPI endpoint
-                requests.post(api_url, json=payload)
+                # Send the PUT request to the FastAPI endpoint
+                response = requests.put(api_url, json=payload)
+                if response.status_code != 200:
+                    raise Exception(f"{response.status_code}")
 
         except requests.exceptions.HTTPError as http_err:
             print(f"HTTP error occurred: {http_err}")
@@ -221,7 +251,6 @@ class DocumentManager:
         total_price = 0
 
         for i, uploaded_file in enumerate(uploaded_files):
-            document_id = str(uuid.uuid4())
             title = Path(uploaded_file.name).stem
             try:
                 bytes_data = uploaded_file.getvalue()
@@ -235,7 +264,6 @@ class DocumentManager:
                 total_price += price
                 content = "".join([page["content"] for page in data])
                 documents.append({
-                    "document_id": document_id,
                     "content": content,
                     "title": title,
                     "vectors": id_list,
@@ -247,7 +275,7 @@ class DocumentManager:
                 st.session_state.upload_failure.append(title)
 
         DocumentManager._sync_to_google_sheets(documents)
-        response = DocumentManager._summarize(documents)
+        # response = DocumentManager._summarize(documents)
         CostManager.update_cost(total_price)
 
     @staticmethod

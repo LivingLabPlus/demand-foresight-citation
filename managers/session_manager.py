@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
+import requests
 from pinecone import Pinecone, ServerlessSpec
 
-from .sheet_manager import SheetManager
 from .pinecone_manager import PineconeManager
 
 
@@ -12,7 +12,6 @@ class SessionManager:
     @staticmethod
     @st.cache_data
     def _transform_message_df(df, username):
-        df = df[df['username'] == username]
         df = df.loc[:, df.columns != 'username']  # Drop without inplace=True
 
         # Ensure timestamp column is in datetime format
@@ -57,26 +56,17 @@ class SessionManager:
         return sorted_result
 
     @staticmethod
-    def _get_documents_by_user(documents, user_documents, username):
-        # return None when cannot retrieve documents from database
-        if documents is None or user_documents is None:
-            return None
-
-        document_ids = user_documents[
-            user_documents["username"] == username
-        ]["document_id"].tolist()
-
-        documents_for_user = documents[
-            documents["document_id"].isin(document_ids)
-        ]
-        return documents_for_user.reset_index(drop=True)
-
-    @staticmethod
     def load_documents():
-        documents = SheetManager.read("documents")
-        st.session_state.documents = SessionManager._get_documents_by_user(
-            documents, st.session_state.user_documents, st.session_state.username
-        )
+        headers = {
+            "Authorization": f"Bearer {st.session_state.token}"
+        }
+        api_url = f"{st.secrets.BACKEND_URL}/documents"
+        response = requests.get(api_url, headers=headers)
+        if response.status_code == 200:
+            documents = response.json()["documents"]
+            st.session_state.documents = pd.DataFrame(documents)
+        else:
+            st.error("無法讀取文件")
 
     @staticmethod
     def token_to_link(token):
@@ -85,30 +75,60 @@ class SessionManager:
     @staticmethod
     def load_initial_data():
         # Load initial data into session state
-        if "user_documents" not in st.session_state:
-            st.session_state.user_documents = SheetManager.read(
-                "userDocuments")
+        username = st.session_state.username
+        headers = {
+            "Authorization": f"Bearer {st.session_state.token}"
+        }
+
+        if username == st.secrets.ADMIN_NAME:
+            if "tokens" not in st.session_state:
+                response = requests.get(
+                    f"{st.secrets.BACKEND_URL}/users",
+                    headers=headers
+                )
+
+                if response.status_code == 200:
+                    users = response.json()["users"]
+                    tokens = pd.DataFrame(users)
+                    tokens["token"] = tokens["token"].apply(SessionManager.token_to_link)
+                    tokens["token_expire_datetime"] = pd.to_datetime(tokens["token_expire_datetime"])
+                    st.session_state.tokens = tokens
+                else:
+                    st.error("無法獲取使用者資料！")
 
         if "documents" not in st.session_state:
             SessionManager.load_documents()
 
         if "tags" not in st.session_state:
-            st.session_state.tags = SheetManager.read("tags")
-
-        if "tokens" not in st.session_state:
-            tokens = SheetManager.read("tokens")
-            tokens["token"] = tokens["token"].apply(
-                SessionManager.token_to_link)
-            st.session_state.tokens = tokens
+            api_url = f"{st.secrets.BACKEND_URL}/tags"
+            response = requests.get(api_url, headers=headers)
+            
+            if response.status_code == 200:
+                st.session_state.tags = pd.DataFrame(response.json()["tags"])
+            else:
+                st.error("無法讀取標籤")
 
         if "cost" not in st.session_state:
-            df = SheetManager.read("cost")
-            df["cost"] = pd.to_numeric(df["cost"])
-            st.session_state.cost = df
+            response = requests.get(
+                f"{st.secrets.BACKEND_URL}/cost",
+                headers=headers
+            )
+            if response.status_code == 200:
+                st.session_state.cost = response.json()["cost"]
+            else:
+                st.error("無法讀取花費金額")
 
         # Initialize chat history
         if "messages" not in st.session_state:
-            messages = SheetManager.read("messages")
+            api_url = f"{st.secrets.BACKEND_URL}/messages"
+            response = requests.get(api_url, headers=headers)
+
+            if response.status_code == 200:
+                messages = pd.DataFrame(response.json()["messages"])
+            else:
+                messages = None
+                st.error("無法讀取標籤")
+            
             if messages is not None:
                 st.session_state.messages = SessionManager._transform_message_df(
                     messages, st.session_state.username)
@@ -118,21 +138,6 @@ class SessionManager:
         if "index" not in st.session_state:
             st.session_state.index = PineconeManager.get_index()
 
-        if "summarization_task" not in st.session_state:
-            st.session_state.summarization_task = {}
-
-        # update st.session_state.documents if summarization has completed
-        unfinished_tasks = {}
-        for document_id, future in st.session_state.summarization_task.items():
-            if future.done():
-                st.session_state.documents.loc[
-                    st.session_state.documents["document_id"] == document_id, "summary"
-                ] = future.result()
-            else:
-                unfinished_tasks[document_id] = future
-
-        # remove finished tasks
-        st.session_state.summarization_task = unfinished_tasks
 
     @staticmethod
     def handle_session_messages():
@@ -142,9 +147,11 @@ class SessionManager:
             "delete_success": "資料刪除成功！",
             "add_tag_success": "標籤新增成功！",
             "delete_tag_success": "標籤刪除成功！",
+            "modify_tag_success": "標籤編輯成功！",
             "update_permission_success": "變更成功！",
             "add_user_success": "使用者新增成功！",
             "delete_user_success": "使用者刪除成功！",
+            "modify_user_expire_time_success": "帳戶到期時間已更新！",
         }
 
         for key, message in session_flags.items():
@@ -171,34 +178,26 @@ class SessionManager:
 
     @staticmethod
     def is_data_loaded():
-        return st.session_state.documents is not None and st.session_state.user_documents is not None
+        return st.session_state.documents is not None
 
     @staticmethod
     def delete_documents(document_ids):
         """Update session state to reflect the deleted documents."""
         st.session_state.documents = st.session_state.documents[
-            ~st.session_state.documents["document_id"].isin(document_ids)
-        ].reset_index(drop=True)
-
-        st.session_state.user_documents = st.session_state.user_documents[
-            ~st.session_state.user_documents["document_id"].isin(document_ids)
+            ~st.session_state.documents["id"].isin(document_ids)
         ].reset_index(drop=True)
 
     @staticmethod
-    def upload_document(
-        document_row,
-        user_document_row
-    ):
+    def upload_document(document_row):
         """Update the local session state with the new document data."""
-        st.session_state.documents = pd.concat(
-            [st.session_state.documents, pd.DataFrame(document_row)]).reset_index(drop=True)
-        st.session_state.user_documents = pd.concat(
-            [st.session_state.user_documents, pd.DataFrame(user_document_row)]).reset_index(drop=True)
+        st.session_state.documents = pd.concat([
+            st.session_state.documents, 
+            pd.DataFrame(document_row)
+        ]).reset_index(drop=True)
 
     @staticmethod
-    def add_tags(tags):
-        new_tag_row = [{"tag": tag} for tag in tags]
-        new_df = pd.DataFrame(new_tag_row)
+    def add_tags(tag_rows):
+        new_df = pd.DataFrame(tag_rows)
         new_df = pd.concat([st.session_state.tags, new_df])
         new_df = new_df.reset_index(drop=True)
         st.session_state.tags = new_df
@@ -210,9 +209,19 @@ class SessionManager:
         st.session_state.tags = filtered_tags
 
     @staticmethod
-    def add_token(username, token):
+    def modify_tag(current_tag, new_tag):
+        st.session_state.documents["tag"] = st.session_state.documents["tag"].replace(
+            current_tag, new_tag
+        )
+
+    @staticmethod
+    def add_token(username, token, token_expire_datetime):
         link = SessionManager.token_to_link(token)
-        new_token_row = [{"username": username, "token": link}]
+        new_token_row = [{
+            "username": username, 
+            "token": link,
+            "token_expire_datetime": pd.Timestamp(token_expire_datetime)
+        }]
         new_df = pd.DataFrame(new_token_row)
         new_df = pd.concat([st.session_state.tokens, new_df])
         new_df = new_df.reset_index(drop=True)
