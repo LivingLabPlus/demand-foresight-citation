@@ -2,7 +2,6 @@ import uuid
 import time
 import pandas as pd
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 from streamlit_tags import st_tags
 from pathlib import Path
 from tqdm import tqdm

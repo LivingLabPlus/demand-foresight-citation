@@ -3,8 +3,6 @@ import uuid
 import requests
 import pandas as pd
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
-from googleapiclient.errors import HttpError
 from langchain_conversational_rag import rag
 from openai import OpenAI
 from datetime import datetime
