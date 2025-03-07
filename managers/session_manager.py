@@ -15,8 +15,8 @@ class SessionManager:
         df = df.loc[:, df.columns != 'username']  # Drop without inplace=True
 
         # Ensure timestamp column is in datetime format
-        df['timestamp'] = pd.to_datetime(
-            df['timestamp'],
+        df['sent_at'] = pd.to_datetime(
+            df['sent_at'],
             format=SessionManager.datetime_format
         )
 
@@ -27,8 +27,9 @@ class SessionManager:
         result = []
 
         for (chat_id, title), group in grouped:
-            messages = group[['role', 'content', 'timestamp']].sort_values(
-                'timestamp').to_dict(orient='records')
+            messages = group[['role', 'content', 'sent_at']].sort_values(
+                'sent_at'
+            ).to_dict(orient='records')
             chat_entry = {
                 'chat_id': chat_id,
                 'title': title,
@@ -45,14 +46,14 @@ class SessionManager:
         #             {
         #                 "role": "string",
         #                 "content": "string",
-        #                 "timestamp": "datetime"
+        #                 "sent_at": "datetime"
         #             }
         #         ]
         #     }
         # ]
 
         sorted_result = sorted(
-            result, key=lambda x: x['messages'][-1]['timestamp'], reverse=True)
+            result, key=lambda x: x['messages'][-1]['sent_at'], reverse=True)
         return sorted_result
 
     @staticmethod
@@ -106,7 +107,10 @@ class SessionManager:
             response = requests.get(api_url, headers=headers)
             
             if response.status_code == 200:
-                st.session_state.tags = pd.DataFrame(response.json()["tags"])
+                if len(response.json()["tags"]) != 0:
+                    st.session_state.tags = pd.DataFrame(response.json()["tags"])
+                else:
+                    st.session_state.tags = pd.DataFrame(columns=["tag_id", "tag"])
             else:
                 st.error("無法讀取標籤")
 
@@ -129,7 +133,7 @@ class SessionManager:
                 messages = pd.DataFrame(response.json()["messages"])
             else:
                 messages = None
-                st.error("無法讀取標籤")
+                st.error("無法讀取訊息")
             
             if messages is not None:
                 st.session_state.messages = SessionManager._transform_message_df(

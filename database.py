@@ -73,8 +73,12 @@ def display_my_documents(my_documents):
 
 def display_document_summaries():
     """Display '文件摘要' tab."""
-    selected_tag = st.selectbox(
-        "選取文件類別", st.session_state.tags["tag"].tolist())
+    if len(st.session_state.tags) != 0:
+        tag_options = st.session_state.tags["tag"].tolist()
+    else:
+        tag_options = []
+
+    selected_tag = st.selectbox("選取文件類別", tag_options)
     titles = DocumentManager.get_document_titles_by_tag(selected_tag)
     selected_title = st.selectbox("選取文件", titles)
 

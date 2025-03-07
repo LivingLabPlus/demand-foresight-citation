@@ -14,16 +14,23 @@ from managers import SessionManager, CostManager
 
 def add_new_user(username, token_expire_datetime):
     api_url = f"{st.secrets.BACKEND_URL}/users"
+    headers = {
+        "Authorization": f"Bearer {st.session_state.token}"
+    }
     payload = {
         "username": username,
         "token_expire_datetime": token_expire_datetime.isoformat()
     }
 
-    response = requests.post(api_url, json=payload)
+    response = requests.post(api_url, json=payload, headers=headers)
     if response.status_code == 200:
         token = response.json()["token"]
         SessionManager.add_token(username, token, token_expire_datetime)
         return 1
+    else:
+        print("POST /user error")
+        print("status code:", response.status_code)
+        print("error:", response.json()["error"])
     return 0
 
 
@@ -87,15 +94,17 @@ def modify_user_expire_time(selected_rows):
             if response.status_code != 200:
                 st.error("無法更新到期時間！")
             else:
-                new_token = response.json()["token"]
+                # print("modify user expire time response:", response.json())
                 st.session_state.tokens.loc[
                     selected_row, "token_expire_datetime"
                 ] = pd.Timestamp(new_expiry)
-                st.session_state.tokens.loc[
-                    selected_row, "token"
-                ] = SessionManager.token_to_link(new_token)
                 st.session_state.modify_user_expire_time_success = 1
                 st.rerun()
+                # new_token = response.json()["token"]
+                # st.session_state.tokens.loc[
+                #     selected_row, "token"
+                # ] = SessionManager.token_to_link(new_token)
+                
 
 
 def delete_users_confirmation(selected_indices):

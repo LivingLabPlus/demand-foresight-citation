@@ -79,8 +79,6 @@ def validate_token(token):
         cookies.save()
     elif response.status_code == 500:
         st.error("Internal server error.")
-    else:
-        st.error("Invalid or expired token. Please request a new login link.")
 
 
 def login():
@@ -106,4 +104,4 @@ if st.session_state.username == st.secrets.ADMIN_NAME:
 if st.session_state.username is not None:
     run_navigation(pages)
 else:
-    st.warning("Please use a provided link to log in.")
+    st.warning("Invalid or expired token. Please request a new login link.")

@@ -17,8 +17,15 @@ class CostManager:
             "timestamp": timestamp
         }
 
-        response = requests.post(api_url, json=payload)
-        if response.status_code != 200:
+        response = requests.post(
+            api_url, 
+            json=payload,
+            headers = {
+                "Authorization": f"Bearer {st.session_state.token}"
+            }
+        )
+        if response.status_code != 201:
+            print("POST /cost status code:", response.status_code)
             st.error("無法更新花費金額")
             return
 
@@ -91,13 +98,20 @@ class CostManager:
                         "date": date["month"],
                         "cost": response.json()["cost"]
                     })
+                else:
+                    print("GET /cost error")
+                    print("params:", params)
+                    print(response.json()["error"])
         
             # Retrieve the sum of all cost
             params = {"username": username} if username is not None else None
-            response = requests.get(base_url, params=params)
+            response = requests.get(base_url, params=params, headers=headers)
             if response.status_code == 200:
                 all_cost = response.json()["cost"]
             else:
+                print("GET /cost error")
+                print("params:", params)
+                print(response.json()["error"])
                 all_cost = -1
 
         return all_cost, pd.DataFrame(cost_list)

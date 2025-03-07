@@ -80,13 +80,14 @@ class DocumentManager:
         return my_documents, shared_documents
 
     @staticmethod
-    def create_document_row(document_id, title, summary, tag):
+    def create_document_row(document_id, title, summary, tag, created_at):
         """Create a dictionary for a new document row."""
         return [{
             "id": document_id,
             "title": title,
             "tag": tag,
             "summary": summary,
+            "created_at": created_at
         }]
 
     @staticmethod
@@ -187,10 +188,12 @@ class DocumentManager:
                     },
                     headers=headers
                 )
-                if response.status_code == 200:
+                if response.status_code == 201:
                     document_id = response.json()["document_id"]
                     documents[i]["document_id"] = document_id
+                    documents[i]["created_at"] = response.json()["created_at"]
                 else:
+                    print("/documents:", response.json()["error"])
                     raise Exception(f"/documents responds status code {response.status_code}")
 
                 # update vectors
@@ -202,7 +205,8 @@ class DocumentManager:
                     },
                     headers=headers
                 )
-                if response.status_code != 200:
+                if response.status_code != 201:
+                    print("/vectors:", response.json()["error"])
                     raise Exception(f"/vectors responds status code {response.status_code}")
 
                 # update session_state
@@ -210,7 +214,8 @@ class DocumentManager:
                     document_id,
                     documents[i]["title"],
                     "摘要產生中，請稍後重新整理",
-                    documents[i]["tag"]
+                    documents[i]["tag"],
+                    pd.to_datetime(documents[i]["created_at"])
                 )
 
                 SessionManager.upload_document(new_document_row)
@@ -218,30 +223,6 @@ class DocumentManager:
             except Exception as e:
                 print(f"Failed to upload {documents[i]['title']} to Google Sheets: {e}")
                 st.session_state.upload_failure.append(documents[i]["title"])
-
-    def _summarize(documents):
-        """
-        Calls the FastAPI /summarize endpoint.
-        """
-        
-        try:
-            for document in stqdm(documents, desc="傳送摘要請求"):
-                # Define the payload with document data
-                api_url = f"{st.secrets.BACKEND_URL}/documents/{document['document_id']}/summary"
-                payload = {
-                    "content": document["content"],
-                    "username": st.session_state.username,
-                }
-
-                # Send the PUT request to the FastAPI endpoint
-                response = requests.put(api_url, json=payload)
-                if response.status_code != 200:
-                    raise Exception(f"{response.status_code}")
-
-        except requests.exceptions.HTTPError as http_err:
-            print(f"HTTP error occurred: {http_err}")
-        except Exception as err:
-            print(f"Other error occurred: {err}")
 
     @staticmethod
     def process_uploaded_files(uploaded_files, tag):
