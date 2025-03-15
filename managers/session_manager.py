@@ -13,7 +13,7 @@ class SessionManager:
     @st.cache_data
     def _transform_message_df(df, username):
         df = df.loc[:, df.columns != 'username']  # Drop without inplace=True
-
+        
         # Ensure timestamp column is in datetime format
         df['sent_at'] = pd.to_datetime(
             df['sent_at'],
@@ -65,7 +65,13 @@ class SessionManager:
         response = requests.get(api_url, headers=headers)
         if response.status_code == 200:
             documents = response.json()["documents"]
-            documents = pd.DataFrame(documents)
+            documents = pd.DataFrame(documents, columns=[
+                "id",
+                "title",
+                "tag",
+                "summary",
+                "created_at"
+            ])
             documents["created_at"] = pd.to_datetime(documents["created_at"])
             st.session_state.documents = documents
         else:
@@ -130,7 +136,15 @@ class SessionManager:
             response = requests.get(api_url, headers=headers)
 
             if response.status_code == 200:
-                messages = pd.DataFrame(response.json()["messages"])
+                messages = pd.DataFrame(response.json()["messages"], columns=[
+                    "username",
+                    "chat_id",
+                    "message_id",
+                    "content",
+                    "title",
+                    "sent_at",
+                    "role"
+                ])
             else:
                 messages = None
                 st.error("無法讀取訊息")

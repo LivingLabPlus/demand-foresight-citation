@@ -54,28 +54,9 @@ class CostManager:
         ) / 1e6
 
 
-    @staticmethod
-    def get_cost_payload():
-        today = pd.Timestamp.today().normalize()
-        start_dates = pd.date_range(end=today, periods=12, freq='MS')  # 每月第一天
-        end_dates = pd.date_range(end=today, periods=12, freq='ME')  # 每月最後一天
-
-        # 轉成 JSON 格式
-        data = [
-            {
-                "month": start.strftime("%Y-%m"),
-                "start_date": start.strftime('%Y-%m-%d'), 
-                "end_date": end.strftime('%Y-%m-%d'),            
-            } 
-            for start, end in zip(start_dates, end_dates)
-        ]
-        return data
-
-
     @st.cache_data
     @staticmethod
     def get_user_usage(username=None):
-        dates = CostManager.get_cost_payload()
         base_url = f"{st.secrets.BACKEND_URL}/cost"
         headers = {
             "Authorization": f"Bearer {st.session_state.token}"
@@ -84,30 +65,16 @@ class CostManager:
         # Retrieve user usage data over the past year.
         cost_list = []
         with st.spinner("獲取使用者數據中..."):    
-            for date in dates:
-                params = {
-                    "start_date": date["start_date"],
-                    "end_date": date["end_date"]
-                }
-                if username is not None:
-                    params["username"] = username
-
-                response = requests.get(base_url, params=params, headers=headers)
-                if response.status_code == 200:
-                    cost_list.append({
-                        "date": date["month"],
-                        "cost": response.json()["cost"]
-                    })
-                else:
-                    print("GET /cost error")
-                    print("params:", params)
-                    print(response.json()["error"])
-        
-            # Retrieve the sum of all cost
             params = {"username": username} if username is not None else None
             response = requests.get(base_url, params=params, headers=headers)
             if response.status_code == 200:
                 all_cost = response.json()["cost"]
+                cost_by_month = response.json()["cost_by_month"]
+                if len(cost_by_month) != 0:
+                    cost_list = [
+                        {"date": date, "cost": cost}
+                        for date, cost in cost_by_month.items()
+                    ] 
             else:
                 print("GET /cost error")
                 print("params:", params)
