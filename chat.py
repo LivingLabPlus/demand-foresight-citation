@@ -3,14 +3,12 @@ import uuid
 import requests
 import pandas as pd
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
-from googleapiclient.errors import HttpError
 from langchain_conversational_rag import rag
 from openai import OpenAI
 from datetime import datetime
 from langchain_community.callbacks import get_openai_callback
 
-from managers import DocumentManager, SheetManager, SessionManager, CostManager
+from managers import DocumentManager, SessionManager, CostManager
 
 client = OpenAI(api_key=st.secrets['OPENAI_API_KEY'])
 # reload messages from google sheet
@@ -46,12 +44,12 @@ def get_title(message):
 def get_options_and_captions(messages):
     options, captions = [], []
     sorted_messages = sorted(
-        messages, key=lambda x: x['messages'][-1]['timestamp'], reverse=True)
+        messages, key=lambda x: x['messages'][-1]['sent_at'], reverse=True)
 
     for m in sorted_messages:
         options.append(m['title'])
         # retrieve the timestamp of the first message in the conversion
-        captions.append(m['messages'][-1]['timestamp'].strftime("%Y-%m-%d"))
+        captions.append(m['messages'][-1]['sent_at'].strftime("%Y-%m-%d"))
 
     return options, captions
 
@@ -70,9 +68,22 @@ if 'selected_dialog' not in st.session_state:
     st.session_state.selected_dialog = None
 
 with st.sidebar:
-    history_tab, option_tab = st.tabs(["對話紀錄", "對話選項"])
+    option_tab, history_tab = st.tabs(["對話選項", "對話紀錄"])
+    if len(st.session_state.tags) != 0:
+        tag_options = st.session_state.tags["tag"].tolist()
+    else:
+        tag_options = []
 
     with option_tab:
+        def new_chat():
+            st.session_state.selected_dialog = None
+
+        st.button(
+            "新對話",
+            on_click=new_chat,
+            use_container_width=True
+        )
+
         select_model = st.selectbox(
             label="模型",
             options=st.secrets["MODEL_OPTION"],
@@ -81,7 +92,7 @@ with st.sidebar:
         )
         select_tag = st.selectbox(
             label="文件類別",
-            options=st.session_state.tags["tag"].tolist(),
+            options=tag_options,
             index=0,
             key="tag_selection"
         )
@@ -104,15 +115,6 @@ with st.sidebar:
                          max_value=1.0, step=0.01, key="temperature")
 
     with history_tab:
-        def new_chat():
-            st.session_state.selected_dialog = None
-
-        st.button(
-            "新對話",
-            on_click=new_chat,
-            use_container_width=True
-        )
-
         if len(options) != 0:
             selected_dialog = st.radio(
                 "對話紀錄",
@@ -139,17 +141,28 @@ def add_message_to_database(title, chat_id, content, role):
     message_id = str(uuid.uuid4())
     timestamp = datetime.now().strftime(datetime_format)
 
-    new_rows = [[
-        st.session_state['username'],
-        str(chat_id),
-        message_id,
-        content,
-        title,
-        timestamp,
-        role,
-    ]]
-
-    SheetManager.append_rows('messages', new_rows)
+    api_url = f"{st.secrets.BACKEND_URL}/messages"
+    new_message = {
+        "username": st.session_state.username,
+        "chat_id": str(chat_id),
+        "message_id": message_id,
+        "content": content,
+        "title": title,
+        "timestamp": timestamp,
+        "role": role
+    }
+    response = requests.post(
+        api_url, 
+        json=new_message,
+        headers={
+            "Authorization": f"Bearer {st.session_state.token}"
+        }
+    )
+    if response.status_code != 201:
+        st.error("新增訊息發生錯誤！")
+        print("/POST messages error")
+        print("status code:", response.status_code)
+        print("error:", response.json()["error"])
 
 
 def update_chat_history(response, role):
@@ -161,7 +174,7 @@ def update_chat_history(response, role):
         dialog['messages'].append({
             'role': role,
             'content': response,
-            'timestamp': datetime.now()
+            'sent_at': datetime.now()
         })
         return dialog['chat_id']
 
@@ -181,7 +194,7 @@ def add_chat_history():
             'messages': [{
                 'role': 'user',
                 'content': st.session_state.user_query,
-                'timestamp': datetime.now()
+                'sent_at': datetime.now()
             }]
         }
         st.session_state.messages.append(dialog)

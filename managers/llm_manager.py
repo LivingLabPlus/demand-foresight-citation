@@ -1,5 +1,4 @@
 import streamlit as st
-import google.generativeai as genai
 from openai import OpenAI
 from .cost_manager import CostManager
 

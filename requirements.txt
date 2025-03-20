@@ -8,9 +8,6 @@ st-gsheets-connection==0.1.0
 PyPDF2==3.0.1
 streamlit-authenticator==0.4.1
 pycryptodome==3.21.0
-google-auth-httplib2 
-google-api-python-client
 stqdm
 streamlit-tags
-google-generativeai
 streamlit-cookies-manager

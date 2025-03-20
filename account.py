@@ -1,14 +1,25 @@
 import yaml
 import streamlit as st
 
-
-def get_current_cost():
-    cost = st.session_state.cost.loc[
-        st.session_state.cost["username"] == st.session_state.username, "cost"
-    ]
-    return f"{cost.iloc[0]:.3f}" if not cost.empty else 0.0
+from managers import CostManager
 
 
-st.title("帳戶")
-st.write(f"使用者名稱: `{st.session_state['username']}`")
-st.write(f"目前總共花費： ${get_current_cost()} USD")
+st.subheader("帳戶")
+st.markdown(f"**使用者名稱:** `{st.session_state['username']}`")
+st.markdown(f"**帳戶到期時間:** {st.session_state['token_expire_date']}")
+
+all_cost, monthly_cost = CostManager.get_user_usage()
+if all_cost == -1:
+    st.error("無法獲取使用額度！")
+else:
+    st.markdown(f"**總共花費金額:** {all_cost:.2f} $USD")
+    
+    if len(monthly_cost) != 0:
+        st.markdown("**過去一年花費紀錄:**")
+        st.bar_chart(
+            monthly_cost,
+            x="date",
+            y="cost",
+            x_label="月份",
+            y_label="花費金額（$USD）"
+        )
