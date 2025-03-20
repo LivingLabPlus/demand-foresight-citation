@@ -37,6 +37,10 @@ class CostManager:
                 "prompt_token": 3,
                 "completion_token": 15
             },
+            "claude-3-7-sonnet-20250219": {
+                "prompt_token": 3,
+                "completion_token": 15
+            },
             "text-embedding-3-small": {
                 "prompt_token": 0.02,
                 "completion_token": 0
