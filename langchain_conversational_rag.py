@@ -18,6 +18,9 @@ from pinecone import Pinecone, ServerlessSpec
 import streamlit as st
 import uuid
 
+# Rebuild the models
+ChatOpenAI.model_rebuild()
+ChatAnthropic.model_rebuild()
 
 def get_index(index_name):
     pc = Pinecone(api_key=st.secrets['PINECONE_API_KEY'])
