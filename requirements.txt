@@ -12,3 +12,4 @@ stqdm
 streamlit-tags
 streamlit-cookies-manager
 pydantic>=2.7.4,<3.0.0
+pydantic-core>=2.10.1

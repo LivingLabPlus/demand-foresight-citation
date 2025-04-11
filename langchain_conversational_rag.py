@@ -21,13 +21,12 @@ import uuid
 # Import required dependencies 
 from typing import Any, Dict, List, Optional, Union, Protocol
 
-# Define mock classes for required types - using Protocol for clean implementation
+# Define mock classes for required types
 class BaseCache(Protocol):
     pass
 
 class BaseCallbacks(Protocol):
     pass
-
 
 def get_index(index_name):
     pc = Pinecone(api_key=st.secrets['PINECONE_API_KEY'])
