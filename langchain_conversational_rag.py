@@ -19,6 +19,7 @@ import streamlit as st
 import uuid
 
 # Rebuild the models
+from langchain_core.caches import BaseCache
 ChatOpenAI.model_rebuild()
 ChatAnthropic.model_rebuild()
 
