@@ -104,4 +104,4 @@ if st.session_state.username == st.secrets.ADMIN_NAME:
 if st.session_state.username is not None:
     run_navigation(pages)
 else:
-    st.warning("Invalid or expired token. Please request a new login link.")
+    st.warning("The URL you entered may be incorrect. Please check whether you have entered the correct URL.")
