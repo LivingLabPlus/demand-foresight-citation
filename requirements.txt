@@ -11,3 +11,4 @@ pycryptodome==3.21.0
 stqdm
 streamlit-tags
 streamlit-cookies-manager
+pydantic==2.8.0

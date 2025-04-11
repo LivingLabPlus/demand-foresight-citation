@@ -18,6 +18,15 @@ from pinecone import Pinecone, ServerlessSpec
 import streamlit as st
 import uuid
 
+# Import required dependencies 
+from typing import Any, Dict, List, Optional, Union, Protocol
+
+# Define mock classes for required types
+class BaseCache(Protocol):
+    pass
+
+class BaseCallbacks(Protocol):
+    pass
 
 system_prompt = '''You are a helpful assistant that is an expert at answering questions with citations.
 
