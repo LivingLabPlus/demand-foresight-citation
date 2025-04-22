@@ -16,6 +16,7 @@
 | Pygments                         | 2.18.0              | BSD License                                                                            |
 | SQLAlchemy                       | 2.0.36              | MIT License                                                                            |
 | Werkzeug                         | 2.3.3               | BSD License                                                                            |
+| XlsxWriter                       | 3.2.3               | BSD License                                                                            |
 | YTAgeGateBypass                  | 2023.1.1            | UNKNOWN                                                                                |
 | absl-py                          | 1.0.0               | Apache Software License                                                                |
 | aiofiles                         | 23.1.0              | Apache Software License                                                                |
@@ -25,6 +26,7 @@
 | alembic                          | 1.14.0              | MIT License                                                                            |
 | altair                           | 5.5.0               | BSD License                                                                            |
 | annotated-types                  | 0.6.0               | MIT License                                                                            |
+| anthropic                        | 0.49.0              | MIT License                                                                            |
 | antlr4-python3-runtime           | 4.9.3               | BSD                                                                                    |
 | anyio                            | 4.9.0               | MIT License                                                                            |
 | appdirs                          | 1.4.4               | MIT License                                                                            |
@@ -104,11 +106,18 @@
 | itsdangerous                     | 2.1.2               | BSD License                                                                            |
 | jiter                            | 0.9.0               | MIT License                                                                            |
 | joblib                           | 1.4.2               | BSD License                                                                            |
+| jsonpatch                        | 1.33                | BSD License                                                                            |
+| jsonpointer                      | 3.0.0               | BSD License                                                                            |
 | jsonschema                       | 4.23.0              | MIT License                                                                            |
 | jsonschema-specifications        | 2024.10.1           | MIT License                                                                            |
 | julius                           | 0.2.7               | MIT License                                                                            |
 | keras                            | 2.8.0               | Apache Software License                                                                |
 | kiwisolver                       | 1.4.5               | BSD License                                                                            |
+| langchain                        | 0.3.23              | MIT                                                                                    |
+| langchain-anthropic              | 0.3.12              | MIT                                                                                    |
+| langchain-core                   | 0.3.55              | MIT                                                                                    |
+| langchain-text-splitters         | 0.3.8               | MIT                                                                                    |
+| langsmith                        | 0.3.33              | MIT License                                                                            |
 | lazy_loader                      | 0.4                 | BSD License                                                                            |
 | libclang                         | 13.0.0              | Apache Software License                                                                |
 | librosa                          | 0.10.2.post1        | ISC License (ISCL)                                                                     |
@@ -138,6 +147,7 @@
 | opt-einsum                       | 3.3.0               | MIT                                                                                    |
 | optparse-pretty                  | 0.1.1               | BSD License                                                                            |
 | optuna                           | 4.0.0               | MIT License                                                                            |
+| orjson                           | 3.10.16             | Apache Software License; MIT License                                                   |
 | outcome                          | 1.3.0.post0         | Apache Software License; MIT License                                                   |
 | packaging                        | 24.1                | Apache Software License; BSD License                                                   |
 | pandas                           | 2.1.4               | BSD License                                                                            |
@@ -163,8 +173,8 @@
 | pycosat                          | 0.6.3               | MIT                                                                                    |
 | pycparser                        | 2.21                | BSD License                                                                            |
 | pycryptodome                     | 3.20.0              | Apache Software License; BSD License; Public Domain                                    |
-| pydantic                         | 2.7.1               | MIT License                                                                            |
-| pydantic_core                    | 2.18.2              | MIT License                                                                            |
+| pydantic                         | 2.11.3              | MIT License                                                                            |
+| pydantic_core                    | 2.33.1              | MIT License                                                                            |
 | pydeck                           | 0.9.1               | Apache License 2.0                                                                     |
 | pydotplus                        | 2.0.2               | MIT License                                                                            |
 | pyee                             | 8.1.0               | MIT License                                                                            |
@@ -175,6 +185,7 @@
 | python-dateutil                  | 2.8.2               | Apache Software License; BSD License                                                   |
 | python-docx                      | 1.1.2               | MIT License                                                                            |
 | python-dotenv                    | 1.0.1               | BSD License                                                                            |
+| python-pptx                      | 1.0.2               | MIT License                                                                            |
 | pytorch-lightning                | 2.4.0               | Apache Software License                                                                |
 | pytorch-metric-learning          | 2.7.0               | MIT License                                                                            |
 | pytz                             | 2021.1              | MIT License                                                                            |
@@ -258,7 +269,8 @@
 | trio                             | 0.27.0              | Apache Software License; MIT License                                                   |
 | trio-websocket                   | 0.11.1              | MIT License                                                                            |
 | typer                            | 0.12.3              | MIT License                                                                            |
-| typing_extensions                | 4.11.0              | Python Software Foundation License                                                     |
+| typing-inspection                | 0.4.0               | MIT License                                                                            |
+| typing_extensions                | 4.13.2              | UNKNOWN                                                                                |
 | tzdata                           | 2023.3              | Apache Software License                                                                |
 | tzlocal                          | 2.1                 | MIT License                                                                            |
 | urllib3                          | 2.2.3               | MIT License                                                                            |
